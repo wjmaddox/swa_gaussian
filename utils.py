@@ -1,6 +1,5 @@
-import os
 import torch
-
+import os
 
 def adjust_learning_rate(optimizer, lr):
     for param_group in optimizer.param_groups:
@@ -8,12 +7,12 @@ def adjust_learning_rate(optimizer, lr):
     return lr
 
 
-def save_checkpoint(dir, epoch, **kwargs):
+def save_checkpoint(dir, epoch, name='checkpoint', **kwargs):
     state = {
         'epoch': epoch,
     }
     state.update(kwargs)
-    filepath = os.path.join(dir, 'checkpoint-%d.pt' % epoch)
+    filepath = os.path.join(dir, '%s-%d.pt' % (name, epoch))
     torch.save(state, filepath)
 
 
@@ -26,20 +25,18 @@ def train_epoch(loader, model, criterion, optimizer):
     for i, (input, target) in enumerate(loader):
         input = input.cuda(async=True)
         target = target.cuda(async=True)
-        input_var = torch.autograd.Variable(input)
-        target_var = torch.autograd.Variable(target)
 
-        output = model(input_var)
-        loss = criterion(output, target_var)
+        output = model(input)
+        loss = criterion(output, target)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        loss_sum += loss.data[0] * input.size(0)
-        pred = output.data.max(1, keepdim=True)[1]
-        correct += pred.eq(target_var.data.view_as(pred)).sum()
-
+        loss_sum += loss.data.item() * input.size(0)
+        pred = output.data.argmax(1, keepdim=True)
+        correct += pred.eq(target.data.view_as(pred)).sum().item()
+        
     return {
         'loss': loss_sum / len(loader.dataset),
         'accuracy': correct / len(loader.dataset) * 100.0,
@@ -55,21 +52,19 @@ def eval(loader, model, criterion):
     for i, (input, target) in enumerate(loader):
         input = input.cuda(async=True)
         target = target.cuda(async=True)
-        input_var = torch.autograd.Variable(input)
-        target_var = torch.autograd.Variable(target)
 
-        output = model(input_var)
-        loss = criterion(output, target_var)
+        output = model(input)
+        loss = criterion(output, target)
 
-        loss_sum += loss.data[0] * input.size(0)
-        pred = output.data.max(1, keepdim=True)[1]
-        correct += pred.eq(target_var.data.view_as(pred)).sum()
+        loss_sum += loss.item() * input.size(0)
+        pred = output.data.argmax(1, keepdim=True)
+        correct += pred.eq(target.data.view_as(pred)).sum().item()
 
+    print(correct)
     return {
         'loss': loss_sum / len(loader.dataset),
         'accuracy': correct / len(loader.dataset) * 100.0,
     }
-
 
 def moving_average(net1, net2, alpha=1):
     for param1, param2 in zip(net1.parameters(), net2.parameters()):
@@ -104,7 +99,7 @@ def _set_momenta(module, momenta):
         module.momentum = momenta[module]
 
 
-def bn_update(loader, model):
+def bn_update(loader, model, **kwargs):
     """
         BatchNorm buffers update (if any).
         Performs 1 epochs to estimate buffers average using train dataset.
@@ -129,7 +124,7 @@ def bn_update(loader, model):
         for module in momenta.keys():
             module.momentum = momentum
 
-        model(input_var)
+        model(input_var, **kwargs)
         n += b
 
     model.apply(lambda module: _set_momenta(module, momenta))

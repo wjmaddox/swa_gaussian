@@ -1,3 +1,22 @@
+# CLONE OF TIMUR GARIPOV'S SWA REPO ON 6/7/18
+
+goal of this repo is to expand swa with variances, as well as attempt ensembling
+
+run_swag: timur's code for training with both first and second moments using swa
+
+swag: set-up for swag
+
+swag_model_loading: evaluates a pre-trained swag by comparing to swa, 1 sample from the gaussian and the average prediction from 100 gaussians
+  - currently looks like ensembling using the gaussian is effective
+
+comparisons on cifar10 will be against
+  - dropout
+  - swa
+  - laplace approximations, "A Scalable Laplace Approximation for Neural Networks"
+
+
+
+
 # Stochastic Weight Averaging (SWA)
 This repository contains a PyTorch implementation of the Stochastic Weight Averaging (SWA) training method for DNNs from the paper
 
