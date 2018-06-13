@@ -28,7 +28,8 @@ def swag_parameters(module, params, no_cov_mat=True):
         module.register_buffer('%s_mean' % name, data.new(data.size()).zero_())
         module.register_buffer('%s_sq_mean' % name, data.new(data.size()).zero_())
         if no_cov_mat is False:
-            module.register_buffer('%s_cov_mat' % name, torch.sparse.FloatTensor(data.numel(), data.numel()))
+            module.register_buffer('%s_cov_mat_sqrt' % name, torch.zeros(0, data.numel()))
+
         params.append((module, name))
 
 class SWAG(torch.nn.Module):
@@ -73,16 +74,17 @@ class SWAG(torch.nn.Module):
             sq_mean = sq_mean * self.n_models / (self.n_models + 1.0) + base_param.data ** 2 / (self.n_models + 1.0)
 
             if self.no_cov_mat is False:
-                cov_mat = module.__getattr__('%s_cov_mat' % name)
+                cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
                 
                 #block covariance matrices, naive way of doing this
                 dev = (base_param.data - mean).view(-1,1)
                 
-                cov_mat._values().mul_(self.n_models / (self.n_models + 1.0))
-                cov_mat +=  to_sparse( dev.mul(dev.t()) * self.n_models / ((self.n_models + 1.0) ** 2) ).cuda()
+                cov_mat_sqrt._values().mul_(self.n_models / (self.n_models + 1.0))
+                #cov_mat +=  to_sparse( dev.mul(dev.t()) * self.n_models / ((self.n_models + 1.0) ** 2) ).cuda()
                 #reference for this update: http://www.cs.columbia.edu/~djhsu/papers/gauss.pdf
-
-                module.__setattr__('%s_cov_mat' % name, cov_mat)
+                #tallying this at the end
+                cov_mat_sqrt = torch.cat((cov_mat_sqrt, dev.view(-1,1)),dim=-1)
+                module.__setattr__('%s_cov_mat_sqrt' % name, cov_mat_sqrt)
 
             module.__setattr__('%s_mean' % name, mean)
             module.__setattr__('%s_sq_mean' % name, sq_mean)

@@ -36,7 +36,7 @@ parser.add_argument('--swa_c_epochs', type=int, default=1, metavar='N',
 parser.add_argument('--swa_resume', type=str, default=None, metavar='CKPT',
                     help='checkpoint to restor SWA from (default: None)')
  """
-
+parser.add_argument('--plot', action='store_true', help='plot replications (default: off)')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 
 args = parser.parse_args()
@@ -54,15 +54,37 @@ torch.cuda.manual_seed(args.seed)
 print('Using model %s' % args.model)
 model_cfg = getattr(models, args.model)
 
-print('Loading dataset %s from %s' % (args.dataset, args.data_path))
-loaders, num_classes = data.loaders(
-    args.dataset,
-    args.data_path,
-    args.batch_size,
-    args.num_workers,
-    model_cfg.transform_train,
-    model_cfg.transform_test
-)
+#sorry this is hardcoded for now
+if args.dataset == 'CIFAR10.1':
+    #from torchvision import transforms
+    import sys
+    sys.path.append('/home/wm326/CIFAR-10.1/code')
+    from cifar10_1_dataset import cifar10_1
+    
+    dataset = cifar10_1(transform=model_cfg.transform_test)
+    loaders = {'test': torch.utils.data.DataLoader(dataset, batch_size = args.batch_size, num_workers = args.num_workers)}
+
+    #version = 'default'
+    #images, labels = cutils.load_new_test_data(version)
+    #print('\nLoaded version "{}" of the CIFAR-10.1 dataset.'.format(version))
+    #print('There are {} images in the dataset.'.format(num_images))
+
+    #images = image_transform(images)
+    #cifar10_1 = torch.utils.dataset(images, torch.from_numpy(labels).long())
+    
+    #loaders = {'test': torch.utils.data.DataLoader(cifar10_1, batch_size = args.batch_size, num_workers = args.num_workers)}
+    num_classes = 10
+
+else:
+    print('Loading dataset %s from %s' % (args.dataset, args.data_path))
+    loaders, num_classes = data.loaders(
+        args.dataset,
+        args.data_path,
+        args.batch_size,
+        args.num_workers,
+        model_cfg.transform_train,
+        model_cfg.transform_test
+    )
 
 print('Preparing model')
 model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
@@ -128,29 +150,30 @@ print('SWAG, 1 sample: ', swag_1sample_mean[0], swag_1sample_mean[1])
 print('SWAG, 3 samples: ', swag_3sample_mean[0], swag_3sample_mean[1])
 print('SWAG, 10 samples: ', swag_10sample_mean[0], swag_10sample_mean[1])
 
-print('Now running accuracy over range')
+if args.plot:
+    print('Now generating accuracy plot')
 
-accuracy = []
-accuracy_sd = []
-ivec = []
-for i in chain(range(1, 10), range(10, 100, 10)):
-    print('Using ', i, ' samples')
-    ivec.append(i)
+    accuracy = []
+    accuracy_sd = []
+    ivec = []
+    for i in chain(range(1, 10), range(10, 100, 10)):
+        print('Using ', i, ' samples')
+        ivec.append(i)
 
-    current_accuracy = []
-    #replicate everything 10x
-    for _ in range(args.replications):
-        out = utils.fast_ensembling(loaders['test'], swag_model, criterion, samples=i, scale=1.0)
-        current_accuracy.append(out)
-    mean, sd = compute_mean_var(current_accuracy)
+        current_accuracy = []
+        #replicate everything 10x
+        for _ in range(args.replications):
+            out = utils.fast_ensembling(loaders['test'], swag_model, criterion, samples=i, scale=1.0)
+            current_accuracy.append(out)
+        mean, sd = compute_mean_var(current_accuracy)
 
-    accuracy.append(mean)
-    accuracy_sd.append(sd)
+        accuracy.append(mean)
+        accuracy_sd.append(sd)
 
-import matplotlib.pyplot as plt
-plt.errorbar(ivec, accuracy, yerr=accuracy_sd)
-plt.axhline(swa_mean[0], lw=4, color='r')
-plt.axhline(sgd_mean[0], lw=4, color='g')
-plt.xlabel('Samples in Ensemble')
-plt.ylabel('Accuracy')
-plt.savefig(args.dataset + '_ensemble_accuracy.png')
+    import matplotlib.pyplot as plt
+    plt.errorbar(ivec, accuracy, yerr=accuracy_sd)
+    plt.axhline(swa_mean[0], lw=4, color='r')
+    plt.axhline(sgd_mean[0], lw=4, color='g')
+    plt.xlabel('Samples in Ensemble')
+    plt.ylabel('Accuracy')
+    plt.savefig(args.dataset + '_ensemble_accuracy.png')

@@ -53,6 +53,7 @@ def eval(loader, model, criterion):
         input = input.cuda(async=True)
         target = target.cuda(async=True)
 
+        #print(input.size())
         output = model(input)
         loss = criterion(output, target)
 

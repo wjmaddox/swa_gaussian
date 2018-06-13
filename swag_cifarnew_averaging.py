@@ -23,7 +23,7 @@ images, labels = cutils.load_new_test_data(version)
 print('\nLoaded version "{}" of the CIFAR-10.1 dataset.'.format(version))
 #print('There are {} images in the dataset.'.format(num_images))
 
-cifar10_1 = tud.TensorDataset(torch.from_numpy(images).permute(0, 3, 1, 2).float(), torch.from_numpy(labels).long())
+cifar10_1 = tud.TensorDataset(torch.from_numpy(images).permute(0, 3, 1, 2).float(), torch.from_numpy(labels).long(), transform = model_cfg.transform_test)
 loader = tud.DataLoader(cifar10_1, batch_size = args.batch_size, num_workers = args.num_workers)
 num_classes = 10
 
