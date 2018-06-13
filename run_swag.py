@@ -69,7 +69,8 @@ loaders, num_classes = data.loaders(
     args.batch_size,
     args.num_workers,
     model_cfg.transform_train,
-    model_cfg.transform_test
+    model_cfg.transform_test,
+    use_validation=not args.use_test
 )
 
 print('Preparing model')
@@ -130,7 +131,6 @@ utils.save_checkpoint(
 )
 
 for epoch in range(start_epoch, args.epochs):
-    print('here')
     time_ep = time.time()
 
     lr = schedule(epoch)
@@ -144,7 +144,7 @@ for epoch in range(start_epoch, args.epochs):
     if args.swa and (epoch + 1) >= args.swa_start and (epoch + 1 - args.swa_start) % args.swa_c_epochs == 0:
         swag_model.collect_model(model)
         if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
-            swag_model.sample(1.0)
+            swag_model.sample(0.0)
             utils.bn_update(loaders['train'], swag_model)
             swag_res = utils.eval(loaders['test'], swag_model, criterion)
         else:
@@ -188,6 +188,6 @@ if args.epochs % args.save_freq != 0:
         utils.save_checkpoint(
             args.dir,
             args.epochs,
-            name='swa',
+            name='swag',
             state_dict=swag_model.state_dict(),
         )

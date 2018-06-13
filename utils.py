@@ -60,7 +60,6 @@ def eval(loader, model, criterion):
         pred = output.data.argmax(1, keepdim=True)
         correct += pred.eq(target.data.view_as(pred)).sum().item()
 
-    print(correct)
     return {
         'loss': loss_sum / len(loader.dataset),
         'accuracy': correct / len(loader.dataset) * 100.0,

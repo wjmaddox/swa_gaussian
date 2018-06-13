@@ -61,7 +61,8 @@ loaders, num_classes = data.loaders(
     args.batch_size,
     args.num_workers,
     model_cfg.transform_train,
-    model_cfg.transform_test
+    model_cfg.transform_test,
+    use_validation=not args.use_test
 )
 
 print('Preparing model')
