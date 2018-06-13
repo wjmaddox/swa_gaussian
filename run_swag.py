@@ -141,7 +141,7 @@ for epoch in range(start_epoch, args.epochs):
     else:
         test_res = {'loss': None, 'accuracy': None}
 
-    if args.swa and (epoch + 1) >= args.swa_start and (epoch + 1 - args.swa_start) % args.swa_c_epochs == 0:
+    if args.swa and (epoch + 1) > args.swa_start and (epoch + 1 - args.swa_start) % args.swa_c_epochs == 0:
         swag_model.collect_model(model)
         if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
             swag_model.sample(0.0)

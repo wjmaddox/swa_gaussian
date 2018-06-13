@@ -1,51 +1,31 @@
-import argparse
-import torch
-import os
+import torch, argparse
+import torch.utils.data as tud
 import models, swag, data, utils
 import torch.nn.functional as F
 
+
+import sys
+sys.path.append('/home/wm326/CIFAR-10.1/code')
+import cutils
+
 parser = argparse.ArgumentParser(description='SGD/SWA training')
 parser.add_argument('--file', type=str, default=None, required=True, help='training directory (default: None)')
-
-parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset name (default: CIFAR10)')
-parser.add_argument('--data_path', type=str, default='/scratch/datasets/', metavar='PATH',
-                    help='path to datasets location (default: None)')
-parser.add_argument('--use_test', dest='use_test', action='store_true', help='use test dataset instead of validation (default: False)')
 parser.add_argument('--batch_size', type=int, default=128, metavar='N', help='input batch size (default: 128)')
 parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
 parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
                     help='model name (default: VGG16)')
-
-parser.add_argument('--resume', type=str, default=None, metavar='CKPT',
-                    help='checkpoint to resume training from (default: None)')
-
-parser.add_argument('--epochs', type=int, default=200, metavar='N', help='number of epochs to train (default: 200)')
-parser.add_argument('--save_freq', type=int, default=25, metavar='N', help='save frequency (default: 25)')
-parser.add_argument('--eval_freq', type=int, default=5, metavar='N', help='evaluation frequency (default: 5)')
-parser.add_argument('--lr_init', type=float, default=0.1, metavar='LR', help='initial learning rate (default: 0.01)')
-parser.add_argument('--momentum', type=float, default=0.9, metavar='M', help='SGD momentum (default: 0.9)')
-parser.add_argument('--wd', type=float, default=1e-4, help='weight decay (default: 1e-4)')
-
-
-parser.add_argument('--swa', action='store_true', help='swa usage flag (default: off)')
-parser.add_argument('--swa_start', type=float, default=161, metavar='N', help='SWA start epoch number (default: 161)')
-parser.add_argument('--swa_lr', type=float, default=0.05, metavar='LR', help='SWA LR (default: 0.05)')
-parser.add_argument('--swa_c_epochs', type=int, default=1, metavar='N',
-                    help='SWA model collection frequency/cycle length in epochs (default: 1)')
-
-parser.add_argument('--swa_resume', type=str, default=None, metavar='CKPT',
-                    help='checkpoint to restor SWA from (default: None)')
-
-
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 
 args = parser.parse_args()
 
-#print('Preparing directory %s' % args.dir)
-#os.makedirs(args.dir, exist_ok=True)
-#with open(os.path.join(args.dir, 'command.sh'), 'w') as f:
-#    f.write(' '.join(sys.argv))
-#    f.write('\n')
+version = 'default'
+images, labels = cutils.load_new_test_data(version)
+print('\nLoaded version "{}" of the CIFAR-10.1 dataset.'.format(version))
+#print('There are {} images in the dataset.'.format(num_images))
+
+cifar10_1 = tud.TensorDataset(torch.from_numpy(images).permute(0, 3, 1, 2).float(), torch.from_numpy(labels).long())
+loader = tud.DataLoader(cifar10_1, batch_size = args.batch_size, num_workers = args.num_workers)
+num_classes = 10
 
 torch.backends.cudnn.benchmark = True
 torch.manual_seed(args.seed)
@@ -53,17 +33,6 @@ torch.cuda.manual_seed(args.seed)
 
 print('Using model %s' % args.model)
 model_cfg = getattr(models, args.model)
-
-print('Loading dataset %s from %s' % (args.dataset, args.data_path))
-loaders, num_classes = data.loaders(
-    args.dataset,
-    args.data_path,
-    args.batch_size,
-    args.num_workers,
-    model_cfg.transform_train,
-    model_cfg.transform_test,
-    use_validation=not args.use_test
-)
 
 print('Preparing model')
 model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
@@ -86,6 +55,7 @@ criterion = F.cross_entropy
 def eval_fast_ensembling(loader, swa_model, criterion, samples = 10, scale = 1.0):
     correct = 0.0
     for i, (input, target) in enumerate(loader):
+        print(input.size(), target.size())
         #load data
         input = input.cuda(async=True)
         target = target.cuda(async=True)
@@ -126,20 +96,35 @@ for i, (module, name) in enumerate(swag_model.params):
     if i==0:
         print(module)
 
-swa_res = utils.eval(loaders['test'], swag_model, criterion)
+swa_res = utils.eval(loader, swag_model, criterion)
 
 #swag predictions
 #swag_model.collect_model(model)
 swag_model.sample(1.0)
-swag_res = utils.eval(loaders['test'], swag_model, criterion)
+swag_res = utils.eval(loader, swag_model, criterion)
 
 #swag-cov1 predictions
 """ swag_model.collect_model(model)
 swag_model.sample(1.0, block_cov=True) """
 
 #now the evaluation fast ensembling
-swagy_res = eval_fast_ensembling(loaders['test'], swag_model, criterion, samples=100, scale=1.0)
+swag_100 = eval_fast_ensembling(loader, swag_model, criterion, samples=100, scale=1.0)
+swag_10 = eval_fast_ensembling(loader, swag_model, criterion, samples = 10, scale=1.0)
 
 print('SWA predictions', swa_res)
 print('1 Sample SWAG predictions', swag_res)
-print('Fast Ensembled SWAG predictions', swagy_res)
+print('SWAG predictions (100 samples)', swag_100)
+print('SWAG predictions (10 samples)', swag_10)
+
+accuracy = []
+ivec = []
+for i in range(1, 10):
+    ivec.append(i)
+    if i%101 is 0:
+        print('now on ', i)
+    out = eval_fast_ensembling(loader, swag_model, criterion, samples=i, scale=1.0)
+    accuracy.append(out['accuracy'])
+
+import matplotlib.pyplot as plt
+plt.plot(ivec, accuracy)
+plt.savefig('cifar101_accuracy_short.png')
