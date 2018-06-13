@@ -1,4 +1,6 @@
 import torch
+import numpy as np
+
 
 def to_sparse(x):
     """ converts dense tensor x to sparse format  
@@ -15,22 +17,21 @@ def to_sparse(x):
     print(indices, values)
     return sparse_tensortype(indices, values, x.size())
 
+
 def swag_parameters(module, params, no_cov_mat=True):
-    module.curve_parameters = dict()
     for name in list(module._parameters.keys()):
         if module._parameters[name] is None:
             print(module, name)
             continue
         data = module._parameters[name].data
         module._parameters.pop(name)
-        module.curve_parameters[name] = list()
-
         module.register_buffer('%s_mean' % name, data.new(data.size()).zero_())
         module.register_buffer('%s_sq_mean' % name, data.new(data.size()).zero_())
         if no_cov_mat is False:
             module.register_buffer('%s_cov_mat_sqrt' % name, torch.zeros(0, data.numel()))
 
         params.append((module, name))
+
 
 class SWAG(torch.nn.Module):
     def __init__(self, base, no_cov_mat = True, *args, **kwargs):
@@ -55,10 +56,9 @@ class SWAG(torch.nn.Module):
                 eps = mean.new(mean.size()).normal_()
                 w = mean + scale * eps * torch.sqrt(sq_mean - mean ** 2)
                 module.__setattr__(name, w)
-        #else: 
+        # else:
         #    for module, name in self.params:
         #        mean = module.__getattr__('%s_mean', % name)
-                
 
     def collect_model(self, base_model):
         #print(self.n_models.size())
@@ -88,6 +88,23 @@ class SWAG(torch.nn.Module):
 
             module.__setattr__('%s_mean' % name, mean)
             module.__setattr__('%s_sq_mean' % name, sq_mean)
-            
-
         self.n_models.add_(1.0)
+
+    def export_numpy_params(self):
+        mean_list = []
+        sq_mean_list = []
+        for module, name in self.params:
+            mean_list.append(module.__getattr__('%s_mean' % name).cpu().numpy().ravel())
+            sq_mean_list.append(module.__getattr__('%s_sq_mean' % name).cpu().numpy().ravel())
+        mean = np.concatenate(mean_list)
+        sq_mean = np.concatenate(sq_mean_list)
+        var = sq_mean - np.square(mean)
+        return mean, var
+
+    def import_numpy_weights(self, w):
+        k = 0
+        for module, name in self.params:
+            mean = module.__getattr__('%s_mean' % name)
+            s = np.prod(mean.shape)
+            module.__setattr__(name, mean.new_tensor(w[k:k+s].reshape(mean.shape)))
+            k += s
