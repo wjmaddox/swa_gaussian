@@ -29,8 +29,11 @@ def swag_parameters(module, params, no_cov_mat=True, num_models=0):
         module.register_buffer('%s_sq_mean' % name, data.new(data.size()).zero_())
 
         if no_cov_mat is False:
-            #print('max size of cov_mat_sqrt:', num_models, data.numel())
-            module.register_buffer('%s_cov_mat_sqrt' % name, torch.zeros(data.numel(),num_models).cuda())
+            if int(torch.__version__.split('.')[1]) >= 4
+                #print('max size of cov_mat_sqrt:', num_models, data.numel())
+                module.register_buffer('%s_cov_mat_sqrt' % name, torch.zeros(num_models,data.numel()).cuda())
+            else:
+                module.register_buffer('%s_cov_mat_sqrt' % name, Variable(torch.zeros(num_models,data.numel()).cuda()))
 
         params.append((module, name))
 
@@ -57,48 +60,47 @@ class SWAG(torch.nn.Module):
 
     def sample(self, scale=1.0, cov=False):
         for module, name in self.params:
-            #print(module.__dict__.keys())
             mean = module.__getattr__('%s_mean' % name)
             if cov is True:
                 cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
-                eps = torch.zeros(cov_mat_sqrt.size(1),1).normal_().cuda() #rank-deficient normal results
-                w = mean + scale * ((self.n_models - 1) ** 0.5) * cov_mat_sqrt.matmul(eps).view_as(mean) 
+                eps = torch.zeros(cov_mat_sqrt.size(0), 1).normal_().cuda() #rank-deficient normal results
+                w = mean + (scale/((self.max_num_models - 1) ** 0.5)) * cov_mat_sqrt.t().matmul(eps).view_as(mean)
             else:
                 sq_mean = module.__getattr__('%s_sq_mean' % name)
                 eps = mean.new(mean.size()).normal_()
                 w = mean + scale * torch.sqrt(sq_mean - mean ** 2) * eps
             module.__setattr__(name, w)
 
-
     def collect_model(self, base_model):
+        #print(self.n_models)
         for (module, name), base_param in zip(self.params, base_model.parameters()):
             mean = module.__getattr__('%s_mean' % name)
             sq_mean = module.__getattr__('%s_sq_mean' % name)
             
             #first moment
             mean = mean * self.n_models / (self.n_models + 1.0) + base_param.data / (self.n_models + 1.0)
-            
+
             #second moment
             sq_mean = sq_mean * self.n_models / (self.n_models + 1.0) + base_param.data ** 2 / (self.n_models + 1.0)
 
-            module.__setattr__('%s_mean' % name, mean)
-            module.__setattr__('%s_sq_mean' % name, sq_mean)
-
+            #square root of covariance matrix
             if self.no_cov_mat is False:
                 cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
                 
-                #block covariance matrices, naive way of doing this
+                #block covariance matrices, store deviation from current mean
                 dev = (base_param.data - mean).view(-1,1)
-                
-                #cov_mat_sqrt._values().mul_(self.n_models / (self.n_models + 1.0))
-                #cov_mat +=  to_sparse( dev.mul(dev.t()) * self.n_models / ((self.n_models + 1.0) ** 2) ).cuda()
-                #reference for this update: http://www.cs.columbia.edu/~djhsu/papers/gauss.pdf
-                #tallying this at the end
-                cov_mat_sqrt = torch.cat((cov_mat_sqrt, dev.view(-1,1)),dim=-1)
-                if self.n_models >= self.max_num_models:
-                    cov_mat_sqrt = cov_mat_sqrt[:,1:]
-                    #print(cov_mat_sqrt.size(), self.max_num_models)
+                #print(cov_mat_sqrt.size(), dev.size())
+                cov_mat_sqrt = torch.cat((cov_mat_sqrt, dev.view(-1,1).t()),dim=0)
+
+                print(cov_mat_sqrt.size())
+                #remove first column if we have stored too many models
+                if (self.n_models+1) > self.max_num_models:
+                    cov_mat_sqrt = cov_mat_sqrt[1:, :]
+                    print(cov_mat_sqrt.size())
                 module.__setattr__('%s_cov_mat_sqrt' % name, cov_mat_sqrt)
+
+            module.__setattr__('%s_mean' % name, mean)
+            module.__setattr__('%s_sq_mean' % name, sq_mean)
         self.n_models.add_(1.0)
 
     def export_numpy_params(self):
