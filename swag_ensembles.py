@@ -109,7 +109,7 @@ sgd_results = utils.eval(loaders['test'], model, criterion)
 values = ['sgd', 0, False, sgd_results['accuracy'], 0, sgd_results['loss'], 0]
 
 table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
-table = table = table.split('\n')[2]
+#table = table.split('\n')[2]
 
 print(table)
 
@@ -121,7 +121,7 @@ swa_results = utils.eval(loaders['test'], swag_model, criterion)
 values = ['swa', 0, False, swa_results['accuracy'], 0, swa_results['loss'], 0]
 
 table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
-table = table = table.split('\n')[2]
+table = table.split('\n')[2]
 
 print(table)
 
@@ -129,7 +129,10 @@ def run_ensembles(samples, cov):
     return utils.fast_ensembling(loaders['test'], swag_model, criterion, samples=samples, cov=cov)
 
 samples_list = [1, 3, 10]
-cov_list = [True, False]
+if args.no_cov_mat is True:
+    cov_list = [False]
+else:
+    cov_list = [True, False]
 
 swag_replications = []
 for i in range(args.replications):
