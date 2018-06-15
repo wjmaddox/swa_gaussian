@@ -11,10 +11,10 @@ parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset name
 parser.add_argument('--data_path', type=str, default='/scratch/datasets/', metavar='PATH',
                     help='path to datasets location (default: None)')
 parser.add_argument('--use_test', dest='use_test', action='store_true', help='use test dataset instead of validation (default: False)')
-parser.add_argument('--batch_size', type=int, default=128, metavar='N', help='input batch size (default: 128)')
 parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
 parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
                     help='model name (default: VGG16)')
+parser.add_argument('--save_dir', type=str, default=None, required=True, help='path to npz results file')
 
 
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
@@ -34,7 +34,7 @@ print('Loading dataset %s from %s' % (args.dataset, args.data_path))
 loaders, num_classes = data.loaders(
     args.dataset,
     args.data_path,
-    args.batch_size,
+    1,
     args.num_workers,
     model_cfg.transform_train,
     model_cfg.transform_test,
@@ -56,3 +56,10 @@ mean, var = swag_model.export_numpy_params()
 laplace_model.import_numpy_mean(mean)
 print('Estimating variance')
 laplace_model.estimate_variance(loaders['train'], F.cross_entropy)
+
+utils.save_checkpoint(
+    args.save_dir,
+    checkpoint.epoch,
+    'laplace',
+    state_dict=laplace_model.state_dict()
+)

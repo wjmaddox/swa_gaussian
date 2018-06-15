@@ -59,7 +59,7 @@ class Laplace(torch.nn.Module):
             module.__setattr__(name, mean.new_tensor(w[k:k + s].reshape(mean.shape)))
             k += s
 
-    def estimate_variance(self, loader, criterion, samples=40, tau=5e-4):
+    def estimate_variance(self, loader, criterion, samples=1, tau=5e-4):
         fisher_diag = dict()
         for module, name in self.params:
             var = module.__getattr__('%s_var' % name)
@@ -78,10 +78,9 @@ class Laplace(torch.nn.Module):
 
                 loss.backward()
 
-                bs = input.size(0)
                 for module, name in self.params:
                     grad = module.__getattr__(name).grad
-                    fisher_diag[(module, name)].add_(torch.pow(grad, 2) * bs)
+                    fisher_diag[(module, name)].add_(torch.pow(grad, 2))
             t = time.time() - t_s
             print('%d/%d %.2f sec' % (s + 1, samples, t))
 
