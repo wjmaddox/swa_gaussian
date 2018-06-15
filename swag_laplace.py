@@ -59,7 +59,7 @@ laplace_model.estimate_variance(loaders['train'], F.cross_entropy)
 
 utils.save_checkpoint(
     args.save_dir,
-    checkpoint.epoch,
+    checkpoint['epoch'],
     'laplace',
     state_dict=laplace_model.state_dict()
 )
