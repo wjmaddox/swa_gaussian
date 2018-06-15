@@ -40,7 +40,7 @@ parser.add_argument('--swa_start', type=float, default=161, metavar='N', help='S
 parser.add_argument('--swa_lr', type=float, default=0.02, metavar='LR', help='SWA LR (default: 0.02)')
 parser.add_argument('--swa_c_epochs', type=int, default=1, metavar='N',
                     help='SWA model collection frequency/cycle length in epochs (default: 1)')
-parser.add_argument('--cov_mat', action='store_true', help='use sample covariance')
+parser.add_argument('--cov_mat', action='store_true', help='save sample covariance')
 
 parser.add_argument('--swa_resume', type=str, default=None, metavar='CKPT',
                     help='checkpoint to restor SWA from (default: None)')
@@ -85,7 +85,7 @@ else:
     args.no_cov_mat = True
 if args.swa:
     print('SWAG training')
-    swag_model = swag.SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+    swag_model = swag.SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models=20, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
     swag_model.cuda()
 else:
     print('SGD training')

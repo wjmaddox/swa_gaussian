@@ -129,7 +129,14 @@ def bn_update(loader, model, **kwargs):
 
     model.apply(lambda module: _set_momenta(module, momenta))
 
-def fast_ensembling(loader, swa_model, criterion, samples = 10, scale = 1.0):
+def fast_ensembling(loader, swa_model, criterion, samples = 10, cov=True, scale = 1.0):
+    r"""loader: dataset loader
+    swa_model: stochastic weight averaging model
+    criterion: loss function
+    samples: number of samples to draw from laplace approximation
+    scale: multiple to scale the variance of laplace approximation by
+    cov: whether to use the estimated covariance matrix """
+
     correct = 0.0
     for i, (input, target) in enumerate(loader):
         #load data
@@ -142,7 +149,7 @@ def fast_ensembling(loader, swa_model, criterion, samples = 10, scale = 1.0):
         #iterate through averages 
         for _ in range(samples):
             #randomly sample from N(swa, swa_var)
-            swa_model.sample(scale=scale)
+            swa_model.sample(scale=scale, cov=cov)
             swa_model.eval()
 
             #now add forwards pass to running average
