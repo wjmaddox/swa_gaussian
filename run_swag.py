@@ -19,6 +19,7 @@ parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset name
 parser.add_argument('--data_path', type=str, default=None, required=True, metavar='PATH',
                     help='path to datasets location (default: None)')
 parser.add_argument('--use_test', dest='use_test', action='store_true', help='use test dataset instead of validation (default: False)')
+parser.add_argument('--split_classes', type=int, default=None)
 parser.add_argument('--batch_size', type=int, default=128, metavar='N', help='input batch size (default: 128)')
 parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
 parser.add_argument('--model', type=str, default=None, required=True, metavar='MODEL',
@@ -71,7 +72,8 @@ loaders, num_classes = data.loaders(
     args.num_workers,
     model_cfg.transform_train,
     model_cfg.transform_test,
-    use_validation=not args.use_test
+    use_validation=not args.use_test,
+    split_classes=args.split_classes
 )
 
 print('Preparing model')
