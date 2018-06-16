@@ -44,7 +44,7 @@ parser.add_argument('--cov_mat', action='store_true', help='save sample covarian
 
 parser.add_argument('--swa_resume', type=str, default=None, metavar='CKPT',
                     help='checkpoint to restor SWA from (default: None)')
-
+parser.add_argument('--loss', type=str, default='CE', help='loss to use for training model (default: Cross-entropy)')
 
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 
@@ -102,8 +102,11 @@ def schedule(epoch):
         factor = lr_ratio
     return args.lr_init * factor
 
-
-criterion = F.cross_entropy
+if args.loss == 'CE':
+    criterion = F.cross_entropy
+else:
+    criterion = F.mse_loss
+    
 optimizer = torch.optim.SGD(
     model.parameters(),
     lr=args.lr_init,
