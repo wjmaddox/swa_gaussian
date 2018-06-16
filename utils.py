@@ -28,14 +28,18 @@ def train_epoch(loader, model, criterion, optimizer):
 
         output = model(input)
         loss = criterion(output, target)
-
+        
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
         loss_sum += loss.data.item() * input.size(0)
-        pred = output.data.argmax(1, keepdim=True)
-        correct += pred.eq(target.data.view_as(pred)).sum().item()
+        
+        if criterion.__name__ == 'cross_entropy':
+            pred = output.data.argmax(1, keepdim=True)
+            correct += pred.eq(target.data.view_as(pred)).sum().item()
+        if criterion.__name__ == 'mse_loss':
+            correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
         
     return {
         'loss': loss_sum / len(loader.dataset),
@@ -58,8 +62,12 @@ def eval(loader, model, criterion):
         loss = criterion(output, target)
 
         loss_sum += loss.item() * input.size(0)
-        pred = output.data.argmax(1, keepdim=True)
-        correct += pred.eq(target.data.view_as(pred)).sum().item()
+
+        if criterion.__name__ == 'cross_entropy':
+            pred = output.data.argmax(1, keepdim=True)
+            correct += pred.eq(target.data.view_as(pred)).sum().item()
+        if criterion.__name__ == 'mse_loss':
+            correct = loss.sqrt().item()
 
     return {
         'loss': loss_sum / len(loader.dataset),
@@ -138,7 +146,21 @@ def fast_ensembling(loader, swa_model, criterion, samples = 10, cov=True, scale 
     cov: whether to use the estimated covariance matrix """
 
     correct = 0.0
-    for i, (input, target) in enumerate(loader):
+    loss = 0.0
+    for i in range(samples):
+        #randomly sample from N(swa, swa_var)
+        swa_model.sample(scale=scale, cov=cov)
+        res = eval(loader, swa_model, criterion)
+
+        correct = i/(i+1) * correct + 1/(i+1) * res['correct']
+        loss = i/(i+1) * loss + 1/(i+1) * res['loss']
+
+    return {
+        'loss': loss,
+        'accuracy': accuracy
+    }
+
+    """for i, (input, target) in enumerate(loader):
         #load data
         input = input.cuda(async=True)
         target = target.cuda(async=True)
@@ -147,7 +169,7 @@ def fast_ensembling(loader, swa_model, criterion, samples = 10, cov=True, scale 
         output = 0.0
 
         #iterate through averages 
-        for _ in range(samples):
+        
             #randomly sample from N(swa, swa_var)
             swa_model.sample(scale=scale, cov=cov)
             swa_model.eval()
@@ -169,4 +191,4 @@ def fast_ensembling(loader, swa_model, criterion, samples = 10, cov=True, scale 
     return {
         'loss': loss_sum / len(loader.dataset),
         'accuracy': correct / len(loader.dataset) * 100.0,
-    }
+    }"""

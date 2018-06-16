@@ -2,6 +2,17 @@ import numpy as np
 import torch
 import torchvision
 import os
+import regression_data
+
+def loaders(dataset, path, batch_size, num_workers, transform_train, transform_test, use_validation=True, val_size=5000):
+    regression_problem = False
+    try:
+        ds = getattr(torchvision.datasets, dataset)
+    except:
+        if dataset=='toy_regression':
+            ds = regression_data.generate_toy_problem
+            regression_problem = True
+
 
 c10_classes = np.array([
     [0, 1, 2, 8, 9],
@@ -11,7 +22,11 @@ c10_classes = np.array([
 def loaders(dataset, path, batch_size, num_workers, transform_train, transform_test, use_validation=True, split_classes=None):
     ds = getattr(torchvision.datasets, dataset)
     path = os.path.join(path, dataset.lower())
-    train_set = ds(path, train=True, download=True, transform=transform_train)
+    train_set = ds(root=path, train=True, download=True, transform=transform_train)
+
+    num_classes = max(train_set.train_labels) + 1
+    if regression_problem:
+        num_classes = 0
 
 
     if use_validation:
@@ -19,7 +34,7 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
         train_set.train_data = train_set.train_data[:-5000]
         train_set.train_labels = train_set.train_labels[:-5000]
 
-        test_set = ds(path, train=True, download=True, transform=transform_test)
+        test_set = ds(root=path, train=True, download=True, transform=transform_test)
         test_set.train = False
         test_set.test_data = test_set.train_data[-5000:]
         test_set.test_labels = test_set.train_labels[-5000:]
@@ -64,5 +79,5 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
                 pin_memory=True
             ),
         }, \
-        max(train_set.train_labels) + 1
+        num_classes
 
