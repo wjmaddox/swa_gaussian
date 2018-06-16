@@ -56,7 +56,7 @@ class Laplace(torch.nn.Module):
         for module, name in self.params:
             mean = module.__getattr__('%s_mean' % name)
             s = np.prod(mean.shape)
-            module.__setattr__(name, mean.new_tensor(w[k:k + s].reshape(mean.shape)))
+            mean.copy_(mean.new_tensor(w[k:k + s].reshape(mean.shape)))
             k += s
 
     def estimate_variance(self, loader, criterion, samples=1, tau=5e-4):
