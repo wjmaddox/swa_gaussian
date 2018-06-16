@@ -35,7 +35,8 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
         delattr(test_set, 'train_labels')
     else:
         print('You are going to run models on the test set. Are you sure?')
-        test_set = ds(path, train=False, download=True, transform=transform_test)
+        test_set = ds(root=path, train=False, download=True, transform=transform_test)
+
 
     if split_classes is not None:
         assert dataset == 'CIFAR10'
