@@ -48,6 +48,7 @@ parser.add_argument('--swa_resume', type=str, default=None, metavar='CKPT',
 parser.add_argument('--loss', type=str, default='CE', help='loss to use for training model (default: Cross-entropy)')
 
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
+parser.add_argument('--no_schedule', action='store_true', help='store schedule')
 
 args = parser.parse_args()
 
@@ -143,8 +144,11 @@ utils.save_checkpoint(
 for epoch in range(start_epoch, args.epochs):
     time_ep = time.time()
 
-    lr = schedule(epoch)
-    utils.adjust_learning_rate(optimizer, lr)
+    if not args.no_schedule:
+        lr = schedule(epoch)
+        utils.adjust_learning_rate(optimizer, lr)
+    else:
+        lr = args.lr_init
     train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer)
     if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
         test_res = utils.eval(loaders['test'], model, criterion)

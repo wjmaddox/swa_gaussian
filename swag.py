@@ -92,11 +92,11 @@ class SWAG(torch.nn.Module):
                 #print(cov_mat_sqrt.size(), dev.size())
                 cov_mat_sqrt = torch.cat((cov_mat_sqrt, dev.view(-1,1).t()),dim=0)
 
-                print(cov_mat_sqrt.size())
+                #print(cov_mat_sqrt.size())
                 #remove first column if we have stored too many models
                 if (self.n_models+1) > self.max_num_models:
                     cov_mat_sqrt = cov_mat_sqrt[1:, :]
-                    print(cov_mat_sqrt.size())
+                    #print(cov_mat_sqrt.size())
                 module.__setattr__('%s_cov_mat_sqrt' % name, cov_mat_sqrt)
 
             module.__setattr__('%s_mean' % name, mean)

@@ -21,11 +21,10 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
     path = os.path.join(path, dataset.lower())
     train_set = ds(root=path, train=True, download=True, transform=transform_train)
 
-
     if use_validation:
-        print("Using train (45000) + validation (5000)")
-        train_set.train_data = train_set.train_data[:-5000]
-        train_set.train_labels = train_set.train_labels[:-5000]
+        print("Using train (" + str(len(train_set.train_data)-val_size) + ") + validation (" +str(val_size)+ ")")
+        train_set.train_data = train_set.train_data[:-val_size]
+        train_set.train_labels = train_set.train_labels[:-val_size]
 
         test_set = ds(root=path, train=True, download=True, transform=transform_test)
         test_set.train = False
@@ -36,7 +35,6 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
     else:
         print('You are going to run models on the test set. Are you sure?')
         test_set = ds(root=path, train=False, download=True, transform=transform_test)
-
 
     if split_classes is not None:
         assert dataset == 'CIFAR10'
