@@ -62,9 +62,7 @@ swag_model_location = args.dir + '/swag-' + str(args.epoch) + '.pt'
 model_location = args.dir + '/checkpoint-' + str(args.epoch) + '.pt'
 print('Loading sgd model at ' + model_location + ' and swag_model at ' + swag_model_location)
 
-print(torch.cuda.memory_allocated()/(1024.0 ** 3))
 swag_checkpoint = torch.load(swag_model_location)
-print(torch.cuda.memory_allocated()/(1024.0 ** 3))
 
 print('Preparing model')
 model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
@@ -77,9 +75,7 @@ swag_model = swag.SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_model
 swag_model.cuda()
 
 swag_model.load_state_dict(swag_checkpoint['state_dict'])
-#print(torch.cuda.memory_allocated()/(1024.0 ** 3))
 
-#print(torch.cuda.memory_allocated()/(1024.0 ** 3))
 model_checkpoint = torch.load(model_location)
 model.load_state_dict(model_checkpoint['state_dict'])
 
@@ -98,12 +94,58 @@ def compute_predictions(loader, model, criterion=None):
 
 x, y, pred = compute_predictions(loaders['test'], model)
 
-swag_model.sample(0.0)
-x, y, swa_pred = compute_predictions(loaders['test'], swag_model)
-
 import matplotlib.pyplot as plt
-plt.scatter(x[0], y[0], c='blue')
-plt.scatter(x[0], pred[0], c='green')
-plt.scatter(x[0], pred[0], c='red')
-plt.savefig('plots/toy_problem.png')
 
+def regression_averaging(swag_model, cov):
+    input = torch.arange(-6, 6, 0.1).cuda().view(-1,1)
+    input_numpy = input.detach().cpu().numpy()
+    
+    all_output = torch.zeros(0, input.size(1)).cuda()
+    for i in range(1000):
+        swag_model.sample(1.0, cov)
+        output = swag_model(input)
+        all_output = torch.cat((all_output, output.t()), dim= 0)
+        
+        #print(output)
+        #plt.plot(input_numpy, output, c='grey', alpha=0.1)
+
+    ##print(all_output.size())
+    swag_means = torch.mean(all_output, dim = 0).view(-1).detach().cpu().numpy()
+    #print(swag_means.size())
+    swag_std = torch.std(all_output, dim = 0).view(-1).detach().cpu().numpy()
+
+    for alpha, i in zip(range(2, 5), range(4, 1, -1)):
+        #plt.fill_between(input_numpy, swag_means - i * swag_std, swag_means + i * swag_std, c='blue', alpha=alpha)
+        plt.plot(input_numpy, swag_means - i * swag_std, c='blue', alpha=alpha)
+        plt.plot(input_numpy, swag_means + i * swag_std, c='blue', alpha=alpha)
+    
+    #this is swa predictions
+    swag_model.sample(0.0)
+    output = swag_model(input).detach().cpu().numpy()
+    plt.plot(input_numpy, output, c='blue')
+
+    #this is E(y^* | y)
+    plt.plot(input_numpy, swag_means, c='green')
+
+    plt.plot(input_numpy, input_numpy ** 3, c='black')
+
+    return input, input_numpy
+
+#this is sgd
+input, input_numpy = regression_averaging(swag_model, cov=False)
+sgd_output = model(input).detach().cpu().numpy()
+plt.plot(input_numpy, sgd_output, c='red')
+
+#these are the testing data points
+plt.scatter(x[0], y[0], c='black') #these are the true points
+
+plt.savefig('plots/toy_problem_cov_false.png')
+
+plt.close()
+
+regression_averaging(swag_model, cov=True)
+
+plt.scatter(x[0], y[0], c='black')
+
+plt.plot(input_numpy, sgd_output, c='red')
+plt.savefig('plots/toy_problem_cov_true.png')
