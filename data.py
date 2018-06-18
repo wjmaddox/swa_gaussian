@@ -9,7 +9,7 @@ c10_classes = np.array([
     [3, 4, 5, 6, 7]
 ], dtype=np.int32)
 
-def loaders(dataset, path, batch_size, num_workers, transform_train, transform_test, use_validation=True, val_size=5000, split_classes=None):
+def loaders(dataset, path, batch_size, num_workers, transform_train, transform_test, use_validation=True, val_size=5000, split_classes=None, shuffle_train=True):
 
     regression_problem = False
     try:
@@ -63,7 +63,7 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
             'train': torch.utils.data.DataLoader(
                 train_set,
                 batch_size=batch_size,
-                shuffle=True,
+                shuffle=True and shuffle_train,
                 num_workers=num_workers,
                 pin_memory=True
             ),
