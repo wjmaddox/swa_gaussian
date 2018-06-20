@@ -134,20 +134,24 @@ if args.no_cov_mat is True:
 else:
     cov_list = [True, False]
 
-swag_replications = []
-for i in range(args.replications):
+""" swag_replications = []
+
     swag_current_list = []
 
     for (sample, cov) in product(samples_list, cov_list):
         swag_current_list.append([sample, cov, run_ensembles(sample, cov)])
     
-    swag_replications.append(swag_current_list)
+    swag_replications.append(swag_current_list) """
 
 for i, (sample, cov) in enumerate(product(samples_list, cov_list)):
-    matched_list = [j[i] for j in swag_replications]
+    swag_current_list = []
+    for i in range(args.replications):
+        swag_current_list.append([sample, cov, run_ensembles(sample, cov)])
 
-    loss = [j[2]['loss'] for j in matched_list]
-    accuracy = [j[2]['accuracy'] for j in matched_list]
+    #matched_list = [j[i] for j in swag_replications]
+
+    loss = [j[2]['loss'] for j in swag_current_list]
+    accuracy = [j[2]['accuracy'] for j in swag_current_list]
 
     mean_accuracy = np.mean(accuracy)
     sd_accuracy = np.std(accuracy)
@@ -156,15 +160,15 @@ for i, (sample, cov) in enumerate(product(samples_list, cov_list)):
     sd_loss = np.std(loss)
 
     #warning in case sample, cov don't match
-    if sample != matched_list[0][0]:
-        print('warning sample does not match list setup')
-    if cov != matched_list[0][1]:
-        print('warning cov does not match list setup')
+    #if sample != matched_list[0][0]:
+    #    print('warning sample does not match list setup')
+    #if cov != matched_list[0][1]:
+    #    print('warning cov does not match list setup')
     
     values = ['swa', sample, cov, mean_accuracy, sd_accuracy, mean_loss, sd_loss]
 
     table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
-    table = table = table.split('\n')[2]
+    table = table.split('\n')[2]
 
     print(table)
     

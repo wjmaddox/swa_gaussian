@@ -30,7 +30,7 @@ class Laplace(torch.nn.Module):
     def forward(self, input):
         return self.base(input)
 
-    def sample(self, scale=1.0, require_grad=False):
+    def sample(self, scale=1.0, cov=False, require_grad=False):
         for module, name in self.params:
             mean = module.__getattr__('%s_mean' % name)
             var = module.__getattr__('%s_var' % name)

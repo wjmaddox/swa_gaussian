@@ -71,24 +71,63 @@ class SWAG(torch.nn.Module):
                 w = mean + scale * torch.sqrt(sq_mean - mean ** 2) * eps
             module.__setattr__(name, w)
 
-    def collect_model(self, base_model):
+    def collect_model(self, base_model, bm=None):
         #print(self.n_models)
-        for (module, name), base_param in zip(self.params, base_model.parameters()):
-            mean = module.__getattr__('%s_mean' % name)
-            sq_mean = module.__getattr__('%s_sq_mean' % name)
-            
-            #first moment
-            mean = mean * self.n_models / (self.n_models + 1.0) + base_param.data / (self.n_models + 1.0)
+        if bm is None:
+            for (module, name), base_param in zip(self.params, base_model.parameters()):
+                mean = module.__getattr__('%s_mean' % name)
+                sq_mean = module.__getattr__('%s_sq_mean' % name)
+                
+                #first moment
+                mean = mean * self.n_models / (self.n_models + 1.0) + base_param.data / (self.n_models + 1.0)
 
-            #second moment
-            sq_mean = sq_mean * self.n_models / (self.n_models + 1.0) + base_param.data ** 2 / (self.n_models + 1.0)
+                #second moment
+                sq_mean = sq_mean * self.n_models / (self.n_models + 1.0) + base_param.data ** 2 / (self.n_models + 1.0)
 
-            #square root of covariance matrix
-            if self.no_cov_mat is False:
+                #square root of covariance matrix
+                if self.no_cov_mat is False:
+                    cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
+                    
+                    #block covariance matrices, store deviation from current mean
+                    if bm is not None:
+                        dev = (bm_param - mean).view(-1,1)
+                    else:
+                        dev = (base_param.data - mean).view(-1,1)
+                    #print(cov_mat_sqrt.size(), dev.size())
+                    cov_mat_sqrt = torch.cat((cov_mat_sqrt, dev.view(-1,1).t()),dim=0)
+
+                    #print(cov_mat_sqrt.size())
+                    #remove first column if we have stored too many models
+                    if (self.n_models+1) > self.max_num_models:
+                        cov_mat_sqrt = cov_mat_sqrt[1:, :]
+                        #print(cov_mat_sqrt.size())
+                    module.__setattr__('%s_cov_mat_sqrt' % name, cov_mat_sqrt)
+
+                module.__setattr__('%s_mean' % name, mean)
+                module.__setattr__('%s_sq_mean' % name, sq_mean)
+            self.n_models.add_(1.0)
+        else:
+            for (module, name), base_param, bp_value in zip(self.params, base_model.parameters(), bm):
+                mean = module.__getattr__('%s_mean' % name)
+                sq_mean = module.__getattr__('%s_sq_mean' % name)
+                
+                #first moment
+                mean = mean * self.n_models / (self.n_models + 1.0) + base_param.data / (self.n_models + 1.0)
+
+                #second moment
+                sq_mean = sq_mean * self.n_models / (self.n_models + 1.0) + base_param.data ** 2 / (self.n_models + 1.0)
+
+                #square root of covariance matrix
+                #if self.no_cov_mat is False:
                 cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
                 
                 #block covariance matrices, store deviation from current mean
-                dev = (base_param.data - mean).view(-1,1)
+                #if bm is not None:
+                
+                #print(torch.sum(base_param.data - bp_value))
+                dev = (bp_value - mean).view(-1,1)
+                #else:
+                #    dev = (base_param.data - mean).view(-1,1)
                 #print(cov_mat_sqrt.size(), dev.size())
                 cov_mat_sqrt = torch.cat((cov_mat_sqrt, dev.view(-1,1).t()),dim=0)
 
@@ -99,9 +138,10 @@ class SWAG(torch.nn.Module):
                     #print(cov_mat_sqrt.size())
                 module.__setattr__('%s_cov_mat_sqrt' % name, cov_mat_sqrt)
 
-            module.__setattr__('%s_mean' % name, mean)
-            module.__setattr__('%s_sq_mean' % name, sq_mean)
-        self.n_models.add_(1.0)
+                module.__setattr__('%s_mean' % name, mean)
+                module.__setattr__('%s_sq_mean' % name, sq_mean)
+            self.n_models.add_(1.0)
+            del bm
 
     def export_numpy_params(self):
         mean_list = []

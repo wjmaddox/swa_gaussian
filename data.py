@@ -18,6 +18,10 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
         if dataset == 'toy_regression':
             ds = regression_data.generate_toy_problem
             regression_problem = True
+        if dataset == 'boston':
+            ds = regression_data.generate_boston
+            regression_problem = True
+            
     path = os.path.join(path, dataset.lower())
     train_set = ds(root=path, train=True, download=True, transform=transform_train)
 

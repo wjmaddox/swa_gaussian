@@ -16,11 +16,9 @@ parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='num
 parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
                     help='model name (default: VGG16)')
 parser.add_argument('--save_dir', type=str, default=None, required=True, help='path to npz results file')
-
-
+parser.add_argument('--cov_mat', action='store_true', help='save sample covariance')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
-
-
+parser.add_argument('--loss', type=str, default='CE', help='loss to use for training model (default: Cross-entropy)')
 
 args = parser.parse_args()
 
@@ -43,9 +41,13 @@ loaders, num_classes = data.loaders(
     split_classes=args.split_classes
 )
 
+if args.cov_mat:
+    args.no_cov_mat = False
+else:
+    args.no_cov_mat = True
 
 print('Preparing models')
-swag_model = swag.SWAG(model_cfg.base, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+swag_model = swag.SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models=20, loading=True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 swag_model.cuda()
 laplace_model = laplace.Laplace(model_cfg.base, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 laplace_model.cuda()
@@ -54,10 +56,16 @@ print('Loading model %s' % args.file)
 checkpoint = torch.load(args.file)
 swag_model.load_state_dict(checkpoint['state_dict'])
 
+if args.loss == 'CE':
+    criterion = F.cross_entropy
+else:
+    criterion = F.mse_loss
+
 mean, var = swag_model.export_numpy_params()
 laplace_model.import_numpy_mean(mean)
 print('Estimating variance')
-laplace_model.estimate_variance(loaders['train'], F.cross_entropy)
+#i used 1e-4 for weight decay when training the mlps
+laplace_model.estimate_variance(loaders['train'], criterion, tau=1e-4)
 
 utils.save_checkpoint(
     args.save_dir,

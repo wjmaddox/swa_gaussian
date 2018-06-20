@@ -78,6 +78,7 @@ loaders, num_classes = data.loaders(
 )
 
 print('Preparing model')
+print(*model_cfg.args)
 model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 model.cuda()
 
@@ -108,7 +109,18 @@ def schedule(epoch):
 if args.loss == 'CE':
     criterion = F.cross_entropy
 else:
-    criterion = F.mse_loss
+    N = loaders['train'].dataset.__len__()
+    def criterion(output, target):
+        #IG(scale | 1,1) for noise - to add some regularization
+        scale = model.log_noise
+        scale_dist = torch.distributions.gamma.Gamma(torch.ones(1).cuda(), torch.ones(1).cuda())
+
+        #N(target | input, scale)
+        mse_dist = torch.distributions.normal.Normal(loc=output, scale=scale.expand_as(target))
+        loss = N * mse_dist.log_prob(target).sum() + scale_dist.log_prob(scale.pow(-2))
+        print(-loss, scale, len(target))
+        return -loss/len(target)
+    #criterion = F.mse_loss
     
 optimizer = torch.optim.SGD(
     model.parameters(),
@@ -129,9 +141,9 @@ if args.swa and args.swa_resume is not None:
     checkpoint = torch.load(args.swa_resume)
     swag_model.load_state_dict(checkpoint['state_dict'])
 
-columns = ['ep', 'lr', 'tr_loss', 'tr_acc', 'te_loss', 'te_acc', 'time']
+columns = ['ep', 'lr', 'tr_loss', 'tr_acc', 'te_loss', 'te_acc', 'time', 'mem_usage']
 if args.swa:
-    columns = columns[:-1] + ['swa_te_loss', 'swa_te_acc'] + columns[-1:]
+    columns = columns[:-2] + ['swa_te_loss', 'swa_te_acc'] + columns[-2:]
     swag_res = {'loss': None, 'accuracy': None}
 
 utils.save_checkpoint(
@@ -143,20 +155,28 @@ utils.save_checkpoint(
 
 for epoch in range(start_epoch, args.epochs):
     time_ep = time.time()
+    #memory_prior = torch.cuda.memory_allocated()
 
     if not args.no_schedule:
         lr = schedule(epoch)
         utils.adjust_learning_rate(optimizer, lr)
     else:
         lr = args.lr_init
-    train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer)
+    
+    if (args.swa and (epoch + 1) > args.swa_start) and args.cov_mat:
+        model_batch_means, train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, batch_means=True)
+    else:
+        model_batch_means = None
+        train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer)
+
     if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
         test_res = utils.eval(loaders['test'], model, criterion)
     else:
         test_res = {'loss': None, 'accuracy': None}
 
     if args.swa and (epoch + 1) > args.swa_start and (epoch + 1 - args.swa_start) % args.swa_c_epochs == 0:
-        swag_model.collect_model(model)
+        swag_model.collect_model(model, bm=model_batch_means)
+        del model_batch_means
         if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
             swag_model.sample(0.0)
             utils.bn_update(loaders['train'], swag_model)
@@ -180,9 +200,11 @@ for epoch in range(start_epoch, args.epochs):
             )
 
     time_ep = time.time() - time_ep
-    values = [epoch + 1, lr, train_res['loss'], train_res['accuracy'], test_res['loss'], test_res['accuracy'], time_ep]
+    #memory_change = (torch.cuda.memory_allocated() - memory_prior)/(1024.0 ** 3)
+    memory_usage = torch.cuda.memory_allocated()/(1024.0 ** 3)
+    values = [epoch + 1, lr, train_res['loss'], train_res['accuracy'], test_res['loss'], test_res['accuracy'], time_ep, memory_usage]
     if args.swa:
-        values = values[:-1] + [swag_res['loss'], swag_res['accuracy']] + values[-1:]
+        values = values[:-2] + [swag_res['loss'], swag_res['accuracy']] + values[-2:]
     table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
     if epoch % 40 == 0:
         table = table.split('\n')
