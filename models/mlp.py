@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torchvision.transforms as transforms
-__all__=['MLP']
+import torch
+__all__=['MLP', 'MLPBoston']
 
 
 class MLPBase(nn.Module):
@@ -23,6 +24,7 @@ class MLPBase(nn.Module):
             layers.append(nn.ReLU())
         layers.pop() #remove final relu layer
 
+        self.log_noise = nn.Parameter(torch.ones(1))
         self.model = nn.Sequential(*layers)
         print(self.model)
         
@@ -33,5 +35,12 @@ class MLP:
     base = MLPBase
     args = list()
     kwargs = {}
+    transform_train = transforms.ToTensor()
+    transform_test = transforms.ToTensor()
+
+class MLPBoston:
+    base = MLPBase
+    args = list()
+    kwargs = {'in_dim': 13, 'layers': 1, 'hidden':50}
     transform_train = transforms.ToTensor()
     transform_test = transforms.ToTensor()
