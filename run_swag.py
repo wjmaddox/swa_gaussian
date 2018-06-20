@@ -52,6 +52,12 @@ parser.add_argument('--no_schedule', action='store_true', help='store schedule')
 
 args = parser.parse_args()
 
+args.device = None
+if torch.cuda.is_available():
+    args.device = torch.device('cuda')
+else:
+    args.device = torch.device('cpu')
+
 print('Preparing directory %s' % args.dir)
 os.makedirs(args.dir, exist_ok=True)
 with open(os.path.join(args.dir, 'command.sh'), 'w') as f:
@@ -80,7 +86,7 @@ loaders, num_classes = data.loaders(
 print('Preparing model')
 print(*model_cfg.args)
 model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
-model.cuda()
+model.to(args.device)
 
 
 if args.cov_mat:
@@ -90,7 +96,7 @@ else:
 if args.swa:
     print('SWAG training')
     swag_model = swag.SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models=20, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
-    swag_model.cuda()
+    swag_model.to(args.device)
 else:
     print('SGD training')
 
@@ -113,7 +119,7 @@ else:
     def criterion(output, target):
         #IG(scale | 1,1) for noise - to add some regularization
         scale = model.log_noise
-        scale_dist = torch.distributions.gamma.Gamma(torch.ones(1).cuda(), torch.ones(1).cuda())
+        scale_dist = torch.distributions.gamma.Gamma(torch.ones(1).to(args.device), torch.ones(1).to(args.device))
 
         #N(target | input, scale)
         mse_dist = torch.distributions.normal.Normal(loc=output, scale=scale.expand_as(target))
