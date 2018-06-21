@@ -24,8 +24,9 @@ class MLPBase(nn.Module):
             layers.append(nn.ReLU())
         layers.pop() #remove final relu layer
 
-        self.log_noise = nn.Parameter(torch.ones(1))
         self.model = nn.Sequential(*layers)
+        #self.log_noise = nn.Parameter(torch.log(torch.ones(1)*7))
+
         print(self.model)
         
     def forward(self, x):
@@ -40,6 +41,7 @@ class MLP:
 
 class MLPBoston:
     base = MLPBase
+    base.log_noise = nn.Parameter(torch.log(torch.ones(1)*7))
     args = list()
     kwargs = {'in_dim': 13, 'layers': 1, 'hidden':50}
     transform_train = transforms.ToTensor()

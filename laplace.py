@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import torch.distributions
 import time
-
+import utils
 
 def laplace_parameters(module, params):
     for name in list(module._parameters.keys()):
@@ -88,6 +88,21 @@ class Laplace(torch.nn.Module):
             f = fisher_diag[(module, name)] / samples
             var = 1.0 / (f  + tau)
             module.__getattr__('%s_var' % name).copy_(var)
+
+    def compute_scale(self, loader, criterion, logscale_range = torch.arange(-10, 0, 0.1).cuda()):
+        all_losses = torch.zeros_like(logscale_range)
+        for i, logscale in enumerate(logscale_range):
+            current_scale = torch.exp(logscale)
+            self.sample(scale=current_scale)
+
+            result = utils.eval(loader, self, criterion)
+
+            all_losses[i] = result['loss']
+        
+        min_index = torch.min(all_losses,dim=0)[1]
+        scale = torch.exp(logscale_range[min_index]).item()
+
+        return scale
 
 
 
