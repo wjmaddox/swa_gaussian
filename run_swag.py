@@ -124,7 +124,7 @@ else:
         #N(target | input, scale)
         mse_dist = torch.distributions.normal.Normal(loc=output, scale=scale.expand_as(target))
         loss = N * mse_dist.log_prob(target).sum() + scale_dist.log_prob(scale.pow(-2))
-        print(-loss, scale, len(target))
+        #print(-loss, scale, len(target))
         return -loss/len(target)
     #criterion = F.mse_loss
     
@@ -145,6 +145,8 @@ if args.resume is not None:
 
 if args.swa and args.swa_resume is not None:
     checkpoint = torch.load(args.swa_resume)
+    swag_model = swag.SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models=20, loading=True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+    swag_model.to(args.device)
     swag_model.load_state_dict(checkpoint['state_dict'])
 
 columns = ['ep', 'lr', 'tr_loss', 'tr_acc', 'te_loss', 'te_acc', 'time', 'mem_usage']

@@ -4,7 +4,7 @@ import torch.distributions
 import time
 import utils
 
-def laplace_parameters(module, params):
+def laplace_parameters(module, params, no_cov_mat=True, max_num_models=0):
     for name in list(module._parameters.keys()):
         if module._parameters[name] is None:
             print(module, name)
@@ -15,17 +15,24 @@ def laplace_parameters(module, params):
         module.register_buffer('%s_var' % name, data.new(data.size()).zero_())
         module.register_buffer(name, data.new(data.size()).zero_())
 
+        if no_cov_mat is False:
+            if int(torch.__version__.split('.')[1]) >= 4:
+                module.register_buffer('%s_cov_mat_sqrt' % name, torch.zeros(max_num_models,data.numel()).cuda())
+            else:
+                module.register_buffer('%s_cov_mat_sqrt' % name, torch.autograd.Variable(torch.zeros(max_num_models,data.numel()).cuda()))
+
         params.append((module, name))
 
 
 class Laplace(torch.nn.Module):
-    def __init__(self, base, *args, **kwargs):
-        super(Laplace, self).__init__()
-
+    def __init__(self, base, max_num_models=20, no_cov_mat=False, *args, **kwargs):
+        super(Laplace, self).__init__()        
         self.params = list()
 
         self.base = base(*args, **kwargs)
-        self.base.apply(lambda module: laplace_parameters(module=module, params=self.params))
+        self.max_num_models = max_num_models
+
+        self.base.apply(lambda module: laplace_parameters(module=module, params=self.params, no_cov_mat=no_cov_mat, max_num_models=max_num_models))
 
     def forward(self, input):
         return self.base(input)
@@ -34,12 +41,25 @@ class Laplace(torch.nn.Module):
         for module, name in self.params:
             mean = module.__getattr__('%s_mean' % name)
             var = module.__getattr__('%s_var' % name)
-            eps = mean.new(mean.size()).normal_()
-            w = mean + scale * torch.sqrt(var) * eps
+
+            if not cov:
+                eps = mean.new(mean.size()).normal_()
+                w = mean + scale * torch.sqrt(var) * eps
+            else:
+                cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
+                eps = torch.zeros(cov_mat_sqrt.size(0), 1).normal_().cuda() #rank-deficient normal results
+                #sqrt(max_num_models) scaling comes from covariance matrix
+                w = mean + (scale/((self.max_num_models - 1) ** 0.5)) * var * cov_mat_sqrt.t().matmul(eps).view_as(mean)
+
             if require_grad:
                 w.requires_grad_()
             module.__setattr__(name, w)
             getattr(module, name)
+        else:
+            for module, name in self.params:
+                mean = module.__getattr__('%s_mean' % name)
+                var = module.__getattr__('%s_var' % name)
+
 
     def export_numpy_params(self):
         mean_list = []
@@ -58,6 +78,12 @@ class Laplace(torch.nn.Module):
             s = np.prod(mean.shape)
             mean.copy_(mean.new_tensor(w[k:k + s].reshape(mean.shape)))
             k += s
+
+    def import_numpy_cov_mat_sqrt(self, w):
+        k = 0
+        for (module, name), sq in zip(self.params, w):
+            cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
+            cov_mat_sqrt.copy_(cov_mat_sqrt.new_tensor(sq.reshape(cov_mat_sqrt.shape)))
 
     def estimate_variance(self, loader, criterion, samples=1, tau=5e-4):
         fisher_diag = dict()
@@ -89,9 +115,11 @@ class Laplace(torch.nn.Module):
             var = 1.0 / (f  + tau)
             module.__getattr__('%s_var' % name).copy_(var)
 
-    def compute_scale(self, loader, criterion, logscale_range = torch.arange(-10, 0, 0.1).cuda()):
+    def scale_grid_search(self, loader, criterion, logscale_range = torch.arange(-10, 0, 0.5).cuda()):
         all_losses = torch.zeros_like(logscale_range)
+        t_s = time.time()
         for i, logscale in enumerate(logscale_range):
+            print('forwards pass with ', logscale)
             current_scale = torch.exp(logscale)
             self.sample(scale=current_scale)
 
@@ -101,7 +129,8 @@ class Laplace(torch.nn.Module):
         
         min_index = torch.min(all_losses,dim=0)[1]
         scale = torch.exp(logscale_range[min_index]).item()
-
+        t_s_final = time.time() - t_s
+        print('estimating scale took %.2f sec'%(t_s_final))
         return scale
 
 

@@ -29,7 +29,8 @@ parser.add_argument('--cov_mat', action='store_true', help='save sample covarian
 
 parser.add_argument('--plot', action='store_true', help='plot replications (default: off)')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
-
+parser.add_argument('--save_path', type=str, required=True, help='output file to save to')
+parser.add_argument('--num_models', type=int, default=20, help='number of swa covariance models in your checkpoint (default: 20)')
 args = parser.parse_args()
 
 if args.cov_mat:
@@ -44,6 +45,7 @@ torch.cuda.manual_seed(args.seed)
 print('Using model %s' % args.model)
 model_cfg = getattr(models, args.model)
 
+
 #sorry this is hardcoded for now
 if args.dataset == 'CIFAR10.1':
     #from torchvision import transforms
@@ -52,9 +54,19 @@ if args.dataset == 'CIFAR10.1':
     from cifar10_1_dataset import cifar10_1
     
     dataset = cifar10_1(transform=model_cfg.transform_test)
-    loaders = {'test': torch.utils.data.DataLoader(dataset, batch_size = args.batch_size, num_workers = args.num_workers)}
+    test_data_loader = torch.utils.data.DataLoader(dataset, batch_size = args.batch_size, num_workers = args.num_workers)
 
-    num_classes = 10
+    loaders, num_classes = data.loaders(
+        args.dataset[:-2],
+        args.data_path,
+        args.batch_size,
+        args.num_workers,
+        model_cfg.transform_train,
+        model_cfg.transform_test,
+        use_validation=not args.use_test,
+        split_classes=None
+    )
+    loaders['test'] = test_data_loader
 else:
     print('Loading dataset %s from %s' % (args.dataset, args.data_path))
     loaders, num_classes = data.loaders(
@@ -63,8 +75,12 @@ else:
         args.batch_size,
         args.num_workers,
         model_cfg.transform_train,
-        model_cfg.transform_test
+        model_cfg.transform_test,
+        use_validation=not args.use_test,
+        split_classes=None
     )
+
+    
 
 #torch.nn.Module.load_different_state_dict = load_different_state_dict
 #torch.nn.Module._load_from_different_state_dict = _load_from_different_state_dict
@@ -83,14 +99,12 @@ model.cuda()
 
 print('SWAG training')
 
-swag_model = swag.SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models = 20, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+swag_model = swag.SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models = args.num_models, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 
 swag_model.cuda()
 
 swag_model.load_state_dict(swag_checkpoint['state_dict'])
-print(torch.cuda.memory_allocated()/(1024.0 ** 3))
 
-print(torch.cuda.memory_allocated()/(1024.0 ** 3))
 model_checkpoint = torch.load(model_location)
 model.load_state_dict(model_checkpoint['state_dict'])
 del model_checkpoint
@@ -103,52 +117,43 @@ criterion = F.cross_entropy
 #sgd_results, swa_results, swag_1sample_results, swag_3samples_results, swag_10samples_results = [],[],[],[], []
 columns = ['model', 'samples', 'cov', 'acc', 'acc_sd', 'te_loss', 'te_loss_sd']
 
+results = []
 #these are not random...
 #sgd predictions
 sgd_results = utils.eval(loaders['test'], model, criterion) 
 values = ['sgd', 0, False, sgd_results['accuracy'], 0, sgd_results['loss'], 0]
 
 table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
-#table = table.split('\n')[2]
-
 print(table)
+results.append(values)
 
 #swa predictions
 #swag_model.collect_model(model)
 swag_model.sample(0.0)
+utils.bn_update(loaders['train'], swag_model)
 swa_results = utils.eval(loaders['test'], swag_model, criterion)
 
 values = ['swa', 0, False, swa_results['accuracy'], 0, swa_results['loss'], 0]
 
 table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
 table = table.split('\n')[2]
-
 print(table)
+results.append(values)
 
 def run_ensembles(samples, cov):
-    return utils.fast_ensembling(loaders['test'], swag_model, criterion, samples=samples, cov=cov)
+    return utils.fast_ensembling(loaders, swag_model, criterion, samples=samples, cov=cov)
 
-samples_list = [1, 3, 10]
+samples_list = [1, 2, 3, 4, 5, 8, 10, 20, 30, 40, 100]
+#samples_list = [1]
 if args.no_cov_mat is True:
     cov_list = [False]
 else:
     cov_list = [True, False]
 
-""" swag_replications = []
-
-    swag_current_list = []
-
-    for (sample, cov) in product(samples_list, cov_list):
-        swag_current_list.append([sample, cov, run_ensembles(sample, cov)])
-    
-    swag_replications.append(swag_current_list) """
-
 for i, (sample, cov) in enumerate(product(samples_list, cov_list)):
     swag_current_list = []
     for i in range(args.replications):
         swag_current_list.append([sample, cov, run_ensembles(sample, cov)])
-
-    #matched_list = [j[i] for j in swag_replications]
 
     loss = [j[2]['loss'] for j in swag_current_list]
     accuracy = [j[2]['accuracy'] for j in swag_current_list]
@@ -158,12 +163,6 @@ for i, (sample, cov) in enumerate(product(samples_list, cov_list)):
 
     mean_loss = np.mean(loss)
     sd_loss = np.std(loss)
-
-    #warning in case sample, cov don't match
-    #if sample != matched_list[0][0]:
-    #    print('warning sample does not match list setup')
-    #if cov != matched_list[0][1]:
-    #    print('warning cov does not match list setup')
     
     values = ['swa', sample, cov, mean_accuracy, sd_accuracy, mean_loss, sd_loss]
 
@@ -171,10 +170,11 @@ for i, (sample, cov) in enumerate(product(samples_list, cov_list)):
     table = table.split('\n')[2]
 
     print(table)
-    
+    results.append(values)
 
-
-    
+#finally save all results in numpy file
+np.savez(args.save_path, result=results)
+"""   
 def compute_mean_var(results_dict_list):
     accuracy = [i['accuracy'] for i in results_dict_list]
     loss = [i['loss'] for i in results_dict_list]
@@ -213,4 +213,4 @@ if args.plot:
     plt.axhline(sgd_mean[0], lw=4, color='g')
     plt.xlabel('Samples in Ensemble')
     plt.ylabel('Accuracy')
-    plt.savefig(args.dataset + '_ensemble_accuracy.png')
+    plt.savefig(args.dataset + '_ensemble_accuracy.png')"""

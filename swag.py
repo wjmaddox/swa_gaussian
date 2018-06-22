@@ -58,7 +58,10 @@ class SWAG(torch.nn.Module):
     def forward(self, input):
         return self.base(input)
 
-    def sample(self, scale=1.0, cov=False):
+    def sample(self, scale=1.0, cov=False, seed=None):
+        if seed is not None:
+            torch.manual_seed(seed)
+            
         for module, name in self.params:
             mean = module.__getattr__('%s_mean' % name)
             if cov is True:
@@ -143,16 +146,25 @@ class SWAG(torch.nn.Module):
             self.n_models.add_(1.0)
             del bm
 
-    def export_numpy_params(self):
+    def export_numpy_params(self, export_cov_mat=False):
         mean_list = []
         sq_mean_list = []
+        cov_mat_list = []
+
         for module, name in self.params:
             mean_list.append(module.__getattr__('%s_mean' % name).cpu().numpy().ravel())
             sq_mean_list.append(module.__getattr__('%s_sq_mean' % name).cpu().numpy().ravel())
+            if export_cov_mat:
+                cov_mat_list.append(module.__getattr__('%s_cov_mat_sqrt' % name).cpu().numpy().ravel())
         mean = np.concatenate(mean_list)
         sq_mean = np.concatenate(sq_mean_list)
         var = sq_mean - np.square(mean)
-        return mean, var
+
+        if export_cov_mat:
+            #cov_mat = np.concatenate(cov_mat_list)
+            return mean, var, cov_mat_list
+        else:
+            return mean, var
 
     def import_numpy_weights(self, w):
         k = 0

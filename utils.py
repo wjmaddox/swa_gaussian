@@ -1,6 +1,7 @@
 import torch
 import os
 import copy
+from datetime import datetime
 
 def adjust_learning_rate(optimizer, lr):
     for param_group in optimizer.param_groups:
@@ -156,7 +157,10 @@ def bn_update(loader, model, **kwargs):
 
     model.apply(lambda module: _set_momenta(module, momenta))
 
-def fast_ensembling(loader, swa_model, criterion, samples = 10, cov=True, scale = 1.0):
+def inv_softmax(x, eps = 1e-10):
+    return torch.log(x/(1.0 - x + eps))
+
+def fast_ensembling(loaders, swa_model, criterion, samples = 10, cov=True, scale = 1.0):
     r"""loader: dataset loader
     swa_model: stochastic weight averaging model
     criterion: loss function
@@ -164,19 +168,62 @@ def fast_ensembling(loader, swa_model, criterion, samples = 10, cov=True, scale 
     scale: multiple to scale the variance of laplace approximation by
     cov: whether to use the estimated covariance matrix """
 
-    accuracy = 0.0
-    loss = 0.0
-    for i in range(samples):
-        #randomly sample from N(swa, swa_var)
-        swa_model.sample(scale=scale, cov=cov)
-        res = eval(loader, swa_model, criterion)
+    loss_sum = 0.0
+    correct = 0.0
+    #set seed by time + range(samples) basically
+    seed_base = int(datetime.now().timestamp())
 
-        accuracy = i/(i+1) * accuracy + 1/(i+1) * res['accuracy']
-        loss = i/(i+1) * loss + 1/(i+1) * res['loss']
+    for (input, target) in loaders['test']:
+        input = input.cuda(async=True)
+        target = target.cuda(async=True)
+
+        full_output_prob = 0.0
+        for i in range(samples):
+
+            #randomly sample from N(swa, swa_var) with seed i
+            swa_model.sample(scale=scale, cov=cov, seed=i+seed_base)
+            #perform batch norm update with training
+            bn_update(loaders['train'], swa_model)
+
+            """#now iterate through dataset
+            sample_output = torch.zeros(0, num_classes)
+            for j, (input, target) in enumerate(loader):
+                input = input.cuda(async=True)
+                target = target.cuda(async=True)"""
+
+            output = swa_model(input)
+            #print('indiv model loss:', criterion(output,target).data.item())
+            if criterion.__name__ == 'cross_entropy':
+                #print(output.size())
+                #print(torch.nn.Softmax(dim=1)(output).sum(dim=1).size())
+                full_output_prob += torch.nn.Softmax(dim=1)(output) #avg of probabilities
+            else:
+                full_output_prob += output #avg for mse?
+        
+        full_output_prob /= samples
+        #print(full_output.size())
+        eps = 1e-20
+        #full_output_logit = torch.log(full_output_prob/(1.0 - full_output_prob + eps))
+        full_output_logit = full_output_prob.log()
+        #print((full_output_logit - output).sum())
+        loss = criterion(full_output_logit, target)
+        #print('avg model loss: ', loss.data.item())
+
+        loss_sum += loss.data.item() * input.size(0)
+
+        if criterion.__name__ == 'cross_entropy':
+            pred = full_output_logit.data.argmax(1, keepdim=True)
+            correct += pred.eq(target.data.view_as(pred)).sum().item()
+        else:
+            correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
+            #sample_output = torch.cat((sample_output, output))
+        
+            ##average output to full output
+            #full_output += 1/samples * sample_output
 
     return {
-        'loss': loss,
-        'accuracy': accuracy
+        'loss': loss_sum / len(loaders['test'].dataset),
+        'accuracy': correct / len(loaders['test'].dataset) * 100.0
     }
 
     """for i, (input, target) in enumerate(loader):

@@ -19,6 +19,7 @@ parser.add_argument('--save_dir', type=str, default=None, required=True, help='p
 parser.add_argument('--cov_mat', action='store_true', help='save sample covariance')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 parser.add_argument('--loss', type=str, default='CE', help='loss to use for training model (default: Cross-entropy)')
+parser.add_argument('--wd', type=float, default=1e-4, help='weight decay (default: 1e-4)')
 
 args = parser.parse_args()
 
@@ -29,6 +30,7 @@ torch.cuda.manual_seed(args.seed)
 print('Using model %s' % args.model)
 model_cfg = getattr(models, args.model)
 
+print('Split classes', args.split_classes)
 print('Loading dataset %s from %s' % (args.dataset, args.data_path))
 loaders, num_classes = data.loaders(
     args.dataset,
@@ -61,15 +63,39 @@ if args.loss == 'CE':
 else:
     criterion = F.mse_loss
 
-mean, var = swag_model.export_numpy_params()
+if not args.cov_mat:
+    mean, var = swag_model.export_numpy_params()
+    laplace_model.import_numpy_mean(mean)
+
+else:
+    mean, var, cov_mat_list = swag_model.export_numpy_params(export_cov_mat=True)
+    laplace_model.import_numpy_mean(mean)
+
+    laplace_model.import_numpy_cov_mat_sqrt(cov_mat_list)
+
 laplace_model.import_numpy_mean(mean)
+
+#variance estimation
 print('Estimating variance')
 #i used 1e-4 for weight decay when training the mlps
-laplace_model.estimate_variance(loaders['train'], criterion, tau=1e-4)
+laplace_model.estimate_variance(loaders['train'], criterion, tau=args.wd)
+
+
+if not args.cov_mat:
+    print('Estimating Scale')
+    scale = laplace_model.scale_grid_search(loaders['train'], criterion)
+    print('Best scale found is: ', scale)
+
+    model_file_name = 'laplace'
+else:
+    scale = 1.0
+    model_file_name = 'swag-laplace'
+
 
 utils.save_checkpoint(
     args.save_dir,
     checkpoint['epoch'],
-    'laplace',
-    state_dict=laplace_model.state_dict()
+    model_file_name,
+    state_dict=laplace_model.state_dict(),
+    scale=scale
 )
