@@ -61,7 +61,7 @@ loaders, num_classes = data.loaders(
 
 swag_model_location = args.dir + '/swag-' + str(args.epoch) + '.pt'
 model_location = args.dir + '/checkpoint-' + str(args.epoch) + '.pt'
-laplace_model_location = args.dir + '/laplace-' + str(args.epoch) + '.pt'
+laplace_model_location = args.dir + '/swag-laplace-' + str(args.epoch) + '.pt'
 print('Loading sgd model at ' + model_location + ' \n swag_model at ' + swag_model_location + '\n laplace model at ' + laplace_model_location)
 
 
@@ -168,3 +168,8 @@ plot_regression_uncertainty(swag_model, cov=True, output_file='plots/toyreg_swag
 
 #laplace
 plot_regression_uncertainty(laplace_model, scale=None, cov=False, output_file='plots/toyreg_laplace_nocov.png')
+
+#swag - hessian
+plot_regression_uncertainty(laplace_model, scale=1.0, cov=True, output_file='plots/toyreg_slaplace.png')
+
+plot_regression_uncertainty(laplace_model, scale=None, cov=True, output_file='plots/toyreg_slaplace_tuned.png')

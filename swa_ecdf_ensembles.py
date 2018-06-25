@@ -74,7 +74,7 @@ criterion = F.cross_entropy
 
 #this is to generate the list of models we'll be searching for
 def find_models(dir):
-    all_models = os.popen('ls ' + dir + '/*.pt').read().split('\n')
+    all_models = os.popen('ls ' + dir + '/checkpoint*.pt').read().split('\n')
     model_epochs = [int(t.replace('.', '-').split('-')[1]) for t in all_models[:-1]]
     models_to_use = [t >= args.epoch for t in model_epochs]
 
@@ -124,6 +124,26 @@ def empirical_dist_ensembling(loader, model, locs):
         'loss': loss_sum / len(loader.dataset),
         'accuracy': correct / len(loader.dataset) * 100.0
     }
+
+##compute point estimates for last sgd predictions
+if True:
+    columns = ['model', 'epoch', 'acc', 'acc_var', 'loss', 'loss_var']
+
+    pt_loss, pt_accuracy = list(), list()
+
+    epoch = None
+    for dir in args.dir:
+        dir_locs = find_models(dir)
+        model.load_state_dict(torch.load(dir_locs[-1])['state_dict'])
+        epoch = int(dir_locs[-1].replace('.', '-').split('-')[1])
+        res = utils.eval(loaders['test'], model, criterion)
+        pt_loss.append(res['loss'])
+        pt_accuracy.append(res['accuracy'])
+
+    values = [args.model, epoch, np.mean(pt_accuracy), np.var(pt_accuracy), np.mean(pt_loss), np.var(pt_loss)]
+    table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
+    print(table)
+
 
 if not args.no_ensembles:
     ensemble_loss = list()

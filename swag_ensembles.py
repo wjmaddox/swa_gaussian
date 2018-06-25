@@ -143,7 +143,7 @@ results.append(values)
 def run_ensembles(samples, cov):
     return utils.fast_ensembling(loaders, swag_model, criterion, samples=samples, cov=cov)
 
-samples_list = [1, 2, 3, 4, 5, 8, 10, 20, 30, 40, 100]
+samples_list = [1, 3, 10, 20, 30]
 #samples_list = [1]
 if args.no_cov_mat is True:
     cov_list = [False]

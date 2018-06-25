@@ -225,36 +225,3 @@ def fast_ensembling(loaders, swa_model, criterion, samples = 10, cov=True, scale
         'loss': loss_sum / len(loaders['test'].dataset),
         'accuracy': correct / len(loaders['test'].dataset) * 100.0
     }
-
-    """for i, (input, target) in enumerate(loader):
-        #load data
-        input = input.cuda(async=True)
-        target = target.cuda(async=True)
-
-        loss_sum = 0.0
-        output = 0.0
-
-        #iterate through averages 
-        
-            #randomly sample from N(swa, swa_var)
-            swa_model.sample(scale=scale, cov=cov)
-            swa_model.eval()
-
-            #now add forwards pass to running average
-            current_output = swa_model(input)
-            output += current_output
-
-            loss = criterion(current_output, target)
-
-            loss_sum += loss.item() * input.size(0)
-
-        output /= samples
-        loss_sum /= samples
-
-        pred = output.data.argmax(1, keepdim=True)
-        correct += pred.eq(target.data.view_as(pred)).sum().item()
-
-    return {
-        'loss': loss_sum / len(loader.dataset),
-        'accuracy': correct / len(loader.dataset) * 100.0,
-    }"""
