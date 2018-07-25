@@ -1,20 +1,21 @@
-# CLONE OF TIMUR GARIPOV'S SWA REPO ON 6/7/18
+# Fast Uncertainty Estimates and Bayesian Model Averaging of DNNs
 
-goal of this repo is to expand swa with variances, as well as attempt ensembling
+This repo contains a [PyTorch](https://pytorch.org) implementation of our paper [Fast Uncertainty Estimates and Bayesian Model Averaging of DNNs]()
+by Wesley Maddox, Timur Garipov, Pavel Izmailov, Dmitry Vetrov, Andrew Gordon Wilson,
+which appeared at the 2018 Uncertainty in Deep Learning workshop at UAI.
 
-run_swag: timur's code for training with both first and second moments using swa
+If you use this in your work, please consider citing both it and the related SWA paper, [Averaging Weights Leads to Wider Optima and Better Generalization](https://arxiv.org/abs/1803.05407)
+by Pavel Izmailov, Dmitrii Podoprikhin, Timur Garipov, Dmitry Vetrov and Andrew Gordon Wilson.
 
-swag: set-up for swag
+It is partially a clone of Timur Garipov's [SWA repo](https://github.com/timgaripov/swa) (from 6/7/2018).
+
+# Usage 
+
+run_swag.py: Code for training with both first and second moments using swa, there are options for both SWAG-LR and SWAG.
+
+swag.py: set-up for swag
 
 swag_model_loading: evaluates a pre-trained swag by comparing to swa, 1 sample from the gaussian and the average prediction from 100 gaussians
-  - currently looks like ensembling using the gaussian is effective
-
-comparisons on cifar10 will be against
-  - dropout
-  - swa
-  - laplace approximations, "A Scalable Laplace Approximation for Neural Networks"
-
-
 
 
 # Stochastic Weight Averaging (SWA)
@@ -59,7 +60,7 @@ The code in this repository implements both SWA and conventional SGD training, w
 To run SWA use the following command:
 
 ```bash
-python3 train.py --dir=<DIR> \
+python3 run_swag.py --dir=<DIR> \
                  --dataset=<DATASET> \
                  --data_path=<PATH> \
                  --model=<MODEL> \
@@ -69,6 +70,8 @@ python3 train.py --dir=<DIR> \
                  --swa \
                  --swa_start=<SWA_START> \
                  --swa_lr=<SWA_LR>
+                 --cov_mat \
+                 --split_classes
 ```
 
 Parameters:
@@ -85,11 +88,13 @@ Parameters:
 * ```WD``` &mdash; weight decay (default: 1e-4)
 * ```SWA_START``` &mdash; the number of epoch after which SWA will start to average models (default: 161)
 * ```SWA_LR``` &mdash; SWA learning rate (default: 0.05)
+* ```cov_mat``` &mdash; to store the sample covariance matrix along with SWA estimates, rather than simply the second moments
+* ```split_classes``` &mdash; to split CIFAR10 classes and only train on 5 random classes (useful for our uncertainty experiments)
 
 
 To run conventional SGD training use the following command:
 ```bash
-python3 train.py --dir=<DIR> \
+python3 run_swag.py --dir=<DIR> \
                  --dataset=<DATASET> \
                  --data_path=<PATH> \
                  --model=<MODEL> \
@@ -103,16 +108,8 @@ python3 train.py --dir=<DIR> \
 To reproduce the results from the paper run (we use same parameters for both CIFAR-10 and CIFAR-100):
 ```bash
 #VGG16
-python3 train.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=VGG16 --epochs=200 --lr_init=0.05 --wd=5e-4 # SGD
+python3 train.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=VGG16 --epochs=300 --lr_init=0.05 --wd=5e-4 # SGD
 python3 train.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=VGG16 --epochs=300 --lr_init=0.05 --wd=5e-4 --swa --swa_start=161 --swa_lr=0.01 # SWA 1.5 Budgets
-
-#PreResNet110
-python3 train.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH>  --model=PreResNet110 --epochs=150  --lr_init=0.1 --wd=3e-4 # SGD
-python3 train.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH>  --model=PreResNet110 --epochs=225 --lr_init=0.1 --wd=3e-4 --swa --swa_start=126 --swa_lr=0.05 # SWA 1.5 Budgets
-
-#WideResNet28x10 
-python3 train.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=WideResNet28x10 --epochs=200 --lr_init=0.1 --wd=5e-4 # SGD
-python3 train.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=WideResNet28x10 --epochs=300 --lr_init=0.1 --wd=5e-4 --swa --swa_start=161 --swa_lr=0.05 # SWA 1.5 Budgets
 ```
 
 # Results
