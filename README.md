@@ -2,51 +2,16 @@
 
 This repo contains a [PyTorch](https://pytorch.org) implementation of our paper [Fast Uncertainty Estimates and Bayesian Model Averaging of DNNs]()
 by Wesley Maddox, Timur Garipov, Pavel Izmailov, Dmitry Vetrov, Andrew Gordon Wilson,
-which appeared at the 2018 Uncertainty in Deep Learning workshop at UAI.
+which appeared at the [2018 Uncertainty in Deep Learning workshop at UAI](https://sites.google.com/view/udl2018/home?authuser=0).
+
+
+*I don't know if we should ask people to cite SWA paper :)*
+
 
 If you use this in your work, please consider citing both it and the related SWA paper, [Averaging Weights Leads to Wider Optima and Better Generalization](https://arxiv.org/abs/1803.05407)
 by Pavel Izmailov, Dmitrii Podoprikhin, Timur Garipov, Dmitry Vetrov and Andrew Gordon Wilson.
 
-It is partially a clone of Timur Garipov's [SWA repo](https://github.com/timgaripov/swa) (from 6/7/2018).
-
-# Usage 
-
-run_swag.py: Code for training with both first and second moments using swa, there are options for both SWAG-LR and SWAG.
-
-swag.py: set-up for swag
-
-swag_model_loading: evaluates a pre-trained swag by comparing to swa, 1 sample from the gaussian and the average prediction from 100 gaussians
-
-
-# Stochastic Weight Averaging (SWA)
-This repository contains a PyTorch implementation of the Stochastic Weight Averaging (SWA) training method for DNNs from the paper
-
-[Averaging Weights Leads to Wider Optima and Better Generalization](https://arxiv.org/abs/1803.05407)
-
-by Pavel Izmailov, Dmitrii Podoprikhin, Timur Garipov, Dmitry Vetrov and Andrew Gordon Wilson.
-
-# Introduction
-
-SWA is a simple DNN training method that can be used as a drop-in replacement for SGD with improved generalization, faster convergence, and essentially no overhead. The key idea of SWA is to average multiple samples produced by SGD with a modified learning rate schedule. We use a constant or cyclical learning rate schedule that causes SGD to _explore_ the set of points in the weight space corresponding to high-performing networks. We observe that SWA converges more quickly than SGD, and to wider optima that provide higher test accuracy. 
-
-In this repo we implement the constant learning rate schedule that we found to be most practical on CIFAR datasets.
-
-<p align="center">
-  <img src="https://user-images.githubusercontent.com/14368801/37633888-89fdc05a-2bca-11e8-88aa-dd3661a44c3f.png" width=250>
-  <img src="https://user-images.githubusercontent.com/14368801/37633885-89d809a0-2bca-11e8-8d57-3bd78734cea3.png" width=250>
-  <img src="https://user-images.githubusercontent.com/14368801/37633887-89e93784-2bca-11e8-9d71-a385ea72ff7c.png" width=250>
-</p>
-
-Please cite our work if you find this approach useful in your research:
-```latex
-@article{izmailov2018averaging,
-  title={Averaging Weights Leads to Wider Optima and Better Generalization},
-  author={Izmailov, Pavel and Podoprikhin, Dmitrii and Garipov, Timur and Vetrov, Dmitry and Wilson, Andrew Gordon},
-  journal={arXiv preprint arXiv:1803.05407},
-  year={2018}
-}
-```
-
+This repo is based on Timur Garipov's [SWA repo](https://github.com/timgaripov/swa) (from 6/7/2018).
 
 # Dependencies
 * [PyTorch](http://pytorch.org/)
@@ -55,9 +20,11 @@ Please cite our work if you find this approach useful in your research:
 
 # Usage
 
-The code in this repository implements both SWA and conventional SGD training, with examples on the CIFAR-10 and CIFAR-100 datasets.
+## Training SWAG
 
-To run SWA use the following command:
+Here we provide code for running SWAG ensembling and conventional SGD training, with examples on the CIFAR-10 and CIFAR-100 datasets.
+
+To run SWAG use the following command:
 
 ```bash
 python3 run_swag.py --dir=<DIR> \
@@ -103,39 +70,31 @@ python3 run_swag.py --dir=<DIR> \
                  --wd=<WD> 
 ```
 
-## Examples
+### Examples
 
-To reproduce the DNN results from the paper run (we use same parameters for both CIFAR-10 and CIFAR-100):
+To reproduce the DNN ensembling results from the paper run the following comands (we use same parameters for both CIFAR-10 and CIFAR-100):
 ```bash
 #VGG16
 python3 train.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=VGG16 --epochs=300 --lr_init=0.05 --wd=5e-4 # SGD
 python3 train.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=VGG16 --epochs=300 --lr_init=0.05 --wd=5e-4 --swa --swa_start=161 --swa_lr=0.01 # SWA 1.5 Budgets
 ```
 
-# Results
-
 ## Figure Replications
 
-### Figure 1
 
 ```bash
+# Figure 1
 python swag_pathological_example.py
-```
+# Note that this saves the plot and shows it.
 
-Note that this saves the plot and shows it.
-
-### Figure 2
-
-```bash
+# Figure 2
 #MLP
 python run_swag.py --model MLP --dataset toy_regression --data_path None --dir swa_exps/regression_1 --batch_size 20 --epochs 300 --swa --cov_mat --loss MSE --lr_init 0.001 --use_test --no_schedule
 python plot_regression_output.py --model MLP --dataset toy_regression --data_path None --dir swa_exps/regression_1 --batch_size 20 --epoch 300 --swa --use_test --cov_mat
 #the second command will store output in a plots/ folder
 ```
 
-### Figures in Appendix
-
-See the packaged ipython notebook in notebooks/Uncertainty.ipynb.
+See the packaged ipython notebook in `notebooks/Uncertainty.ipynb` to reproduce the figures from the appendix of the paper.
 
 # References
  
