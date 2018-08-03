@@ -75,13 +75,22 @@ python3 run_swag.py --dir=<DIR> \
 To reproduce the DNN ensembling results from the paper run the following comands (we use same parameters for both CIFAR-10 and CIFAR-100):
 ```bash
 #VGG16 train models
+#SGD training
 python3 run_swag.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=VGG16 --epochs=300 --lr_init=0.05 --wd=5e-4 # SGD
+
+#SWAG training
 python3 run_swag.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=VGG16 --epochs=300 --lr_init=0.05 --wd=5e-4 --swa --swa_start=161 --swa_lr=0.01 # SWA 1.5 Budgets
 
+#SWAG-LR training
+python3 run_swag.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=VGG16 --epochs=300 --lr_init=0.05 --wd=5e-4 --swa --swa_start=161 --swa_lr=0.01 --cov_mat # SWA 1.5 Budgets
+
+
 #model ensembling
+#note that the number of samples is hard-coded in
 #with SWAG
 python swag_ensembles.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=VGG16 --epochs=300 --lr_init=0.05 --wd=5e-4 --swa --swa_start=161
-
+#with SWAG-LR
+python swag_ensembles.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=VGG16 --epochs=300 --lr_init=0.05 --wd=5e-4 --swa --swa_start=161 --cov_mat
 #with empirical SGD distribution
 python sgd_ecdf_ensembles.py --dir=<DIR> --dataset=CIFAR100 --data_path=<PATH> --model=VGG16 --epochs=300 --lr_init=0.05 --wd=5e-4 
 ```
