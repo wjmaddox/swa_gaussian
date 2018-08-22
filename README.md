@@ -5,9 +5,6 @@ by Wesley Maddox, Timur Garipov, Pavel Izmailov, Dmitry Vetrov, Andrew Gordon Wi
 which appeared at the [2018 Uncertainty in Deep Learning workshop at UAI](https://sites.google.com/view/udl2018/home?authuser=0).
 
 
-*I don't know if we should ask people to cite SWA paper :)*
-
-
 If you use this in your work, please consider citing both it and the related SWA paper, [Averaging Weights Leads to Wider Optima and Better Generalization](https://arxiv.org/abs/1803.05407)
 by Pavel Izmailov, Dmitrii Podoprikhin, Timur Garipov, Dmitry Vetrov and Andrew Gordon Wilson.
 
