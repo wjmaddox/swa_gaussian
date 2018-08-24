@@ -115,13 +115,13 @@ del model_checkpoint
 criterion = F.cross_entropy
 
 #sgd_results, swa_results, swag_1sample_results, swag_3samples_results, swag_10samples_results = [],[],[],[], []
-columns = ['model', 'samples', 'cov', 'acc', 'acc_sd', 'te_loss', 'te_loss_sd']
+columns = ['model', 'samples', 'cov', 'is', 'acc', 'acc_sd', 'te_loss', 'te_loss_sd']
 
 results = []
 #these are not random...
 #sgd predictions
 sgd_results = utils.eval(loaders['test'], model, criterion) 
-values = ['sgd', 0, False, sgd_results['accuracy'], 0, sgd_results['loss'], 0]
+values = ['sgd', 0, False, False, sgd_results['accuracy'], 0, sgd_results['loss'], 0]
 
 table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
 print(table)
@@ -133,30 +133,41 @@ swag_model.sample(0.0)
 utils.bn_update(loaders['train'], swag_model)
 swa_results = utils.eval(loaders['test'], swag_model, criterion)
 
-values = ['swa', 0, False, swa_results['accuracy'], 0, swa_results['loss'], 0]
+values = ['swa', 0, False, False, swa_results['accuracy'], 0, swa_results['loss'], 0]
 
 table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
 table = table.split('\n')[2]
 print(table)
 results.append(values)
 
-def run_ensembles(samples, cov):
-    return utils.fast_ensembling(loaders, swag_model, criterion, samples=samples, cov=cov)
+def run_ensembles(samples, cov, use_is, reps=args.replications):
+    if use_is is False:
+        method = utils.fast_ensembling
+    else:
+        method = utils.fast_importance_sampling
 
-samples_list = [1, 3, 10, 20, 30]
+    current_list = []
+    for _ in range(reps):
+        current_list.append([sample, cov, use_is, method(loaders, swag_model, criterion, samples=samples, cov=cov,scale=1.0)])
+    return current_list
+
+samples_list = [1, 3, 10, 30]
 #samples_list = [1]
 if args.no_cov_mat is True:
     cov_list = [False]
 else:
     cov_list = [True, False]
 
-for i, (sample, cov) in enumerate(product(samples_list, cov_list)):
-    swag_current_list = []
-    for i in range(args.replications):
-        swag_current_list.append([sample, cov, run_ensembles(sample, cov)])
+is_list = [False]
 
-    loss = [j[2]['loss'] for j in swag_current_list]
-    accuracy = [j[2]['accuracy'] for j in swag_current_list]
+for i, (sample, cov, use_is) in enumerate(product(samples_list, cov_list, is_list)):
+    if cov is True and use_is is True:
+        continue #ignore this case bc its not been implemented
+
+    swag_current_list = run_ensembles(sample, cov, use_is)
+
+    loss = [j[3]['loss'] for j in swag_current_list]
+    accuracy = [j[3]['accuracy'] for j in swag_current_list]
 
     mean_accuracy = np.mean(accuracy)
     sd_accuracy = np.std(accuracy)
@@ -164,7 +175,7 @@ for i, (sample, cov) in enumerate(product(samples_list, cov_list)):
     mean_loss = np.mean(loss)
     sd_loss = np.std(loss)
     
-    values = ['swa', sample, cov, mean_accuracy, sd_accuracy, mean_loss, sd_loss]
+    values = ['swa', sample, cov, use_is, mean_accuracy, sd_accuracy, mean_loss, sd_loss]
 
     table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
     table = table.split('\n')[2]
@@ -174,43 +185,3 @@ for i, (sample, cov) in enumerate(product(samples_list, cov_list)):
 
 #finally save all results in numpy file
 np.savez(args.save_path, result=results)
-"""   
-def compute_mean_var(results_dict_list):
-    accuracy = [i['accuracy'] for i in results_dict_list]
-    loss = [i['loss'] for i in results_dict_list]
-    mean_accuracy = np.mean(accuracy)
-    sd_accuracy = np.std(accuracy)
-
-    mean_loss = np.mean(loss)
-    sd_loss = np.std(loss)
-    return mean_accuracy, sd_accuracy, mean_loss, sd_loss
-
-
-
-if args.plot:
-    print('Now generating accuracy plot')
-
-    accuracy = []
-    accuracy_sd = []
-    ivec = []
-    for i in chain(range(1, 10), range(10, 100, 10)):
-        print('Using ', i, ' samples')
-        ivec.append(i)
-
-        current_accuracy = []
-        #replicate everything 10x
-        for _ in range(args.replications):
-            out = utils.fast_ensembling(loaders['test'], swag_model, criterion, samples=i, scale=1.0)
-            current_accuracy.append(out)
-        mean, sd = compute_mean_var(current_accuracy)
-
-        accuracy.append(mean)
-        accuracy_sd.append(sd)
-
-    import matplotlib.pyplot as plt
-    plt.errorbar(ivec, accuracy, yerr=accuracy_sd)
-    plt.axhline(swa_mean[0], lw=4, color='r')
-    plt.axhline(sgd_mean[0], lw=4, color='g')
-    plt.xlabel('Samples in Ensemble')
-    plt.ylabel('Accuracy')
-    plt.savefig(args.dataset + '_ensemble_accuracy.png')"""
