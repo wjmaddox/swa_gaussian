@@ -92,8 +92,10 @@ class SWAG(torch.nn.Module):
             else:
                 #print('here cov is', cov)
                 if cov is True:
-                    #print(torch.norm(sample))
-                    w = mean + sample.view_as(mean)
+                    sq_mean = module.__getattr__('%s_sq_mean' % name)
+                    eps = mean.new(mean.size()).normal_()
+
+                    w = mean + sample.view_as(mean) + torch.sqrt(sq_mean - mean ** 2) * eps
                 else:
                     sq_mean = module.__getattr__('%s_sq_mean' % name)
                     eps = mean.new(mean.size()).normal_()
