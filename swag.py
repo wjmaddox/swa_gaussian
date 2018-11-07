@@ -121,6 +121,8 @@ class SWAG(torch.nn.Module):
                     sq_mean = module.__getattr__('%s_sq_mean' % name)
                     eps = mean.new(mean.size()).normal_()
 
+                    #see Section 3.3 of variational boosting
+                    #Cov(D'z_1 + sigma I z_2) = DD' + sigma I
                     w = mean + sample.view_as(mean) + torch.sqrt(sq_mean - mean ** 2) * eps
                 else:
                     sq_mean = module.__getattr__('%s_sq_mean' % name)

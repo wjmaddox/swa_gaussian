@@ -21,15 +21,20 @@ class Test_LowRank_P_Diag(unittest.TestCase):
     def test_added_diag_lt(self,N=4000,p=40):
         A, D = self.construct_A_D(N=N,p=p)
 
+        #this is a lazy tensor for DD'
         D_lt = RootLazyTensor(D)
 
+        #this is a lazy tensor for diag(A)
         diag_term = DiagLazyTensor(A)
 
+        #DD' + diag(A)
         lowrank_pdiag_lt = AddedDiagLazyTensor(diag_term, D_lt)
 
+        #z \sim N(0,I), mean = 1
         z = torch.randn(N)
         mean = torch.ones(N)
 
+        #N(1, DD' + diag(A))
         lazydist = MultivariateNormal(mean, lowrank_pdiag_lt)
         lazy_lprob = lazydist.log_prob(z)
 
