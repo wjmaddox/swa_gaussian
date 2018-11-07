@@ -1,22 +1,19 @@
 import torch
 import numpy as np
 import itertools
+from torch.distributions.normal import Normal
 
-def to_sparse(x):
-    """ converts dense tensor x to sparse format  
-        from https://discuss.pytorch.org/t/how-to-convert-a-dense-matrix-to-a-sparse-one/7809/2 """
-    x_typename = torch.typename(x).split('.')[-1]
-    sparse_tensortype = getattr(torch.sparse, x_typename)
-
-    indices = torch.nonzero(x)
-    if sum(indices.shape) == 0:  # if all elements are zeros
-        return sparse_tensortype(*x.shape)
-
-    indices = indices.t()
-    values = x[tuple(indices[i] for i in range(indices.shape[0]))]
-    print(indices, values)
-    return sparse_tensortype(indices, values, x.size())
-
+def unflatten_like(vector, likeTensorList):
+    # Takes a flat torch.tensor and unflattens it to a list of torch.tensors
+    #    shaped like likeTensorList
+    outList = []
+    i=0
+    for tensor in likeTensorList:
+        #n = module._parameters[name].numel()
+        n = tensor.numel()
+        outList.append(vector[:,i:i+n].view(tensor.shape))
+        i+=n
+    return outList
 
 def swag_parameters(module, params, no_cov_mat=True, num_models=0):
     for name in list(module._parameters.keys()):
@@ -61,17 +58,46 @@ class SWAG(torch.nn.Module):
     def sample(self, scale=1.0, cov=False, seed=None):
         if seed is not None:
             torch.manual_seed(seed)
+
+        #different sampling procedure to prevent block based gaussians from being sampled
+        if cov is True and scale != 0.0:
+            #combine all cov mats into a list
+            cov_mat_sqrt_list = []
+            mean_list = []
+            for module, name in self.params:
+                mean_current = module.__getattr__('%s_mean' % name)
+                mean_list.append(mean_current)
+
+                cov_mat_sqrt_current = module.__getattr__('%s_cov_mat_sqrt' % name)
+                cov_mat_sqrt_list.append(cov_mat_sqrt_current)
             
-        for module, name in self.params:
+            #now flatten the covariances into a matrix
+            cov_mat_sqrt = torch.cat(cov_mat_sqrt_list,dim=1)
+            eps = torch.zeros(cov_mat_sqrt.size(0), 1).normal_().cuda() #rank-deficient normal results
+            zero_mean_samples = (scale/((self.max_num_models - 1) ** 0.5)) * cov_mat_sqrt.t().matmul(eps)
+
+            #unflatten the covariances back into a list
+            zero_mean_samples_list = unflatten_like(zero_mean_samples.t(), mean_list)
+            del mean_list
+
+        if cov is not True:
+            iterator = zip(self.params, self.params)
+        else:
+            iterator = zip(self.params, zero_mean_samples_list)
+
+        for (module, name), sample in iterator:                    
             mean = module.__getattr__('%s_mean' % name)
-            if cov is True:
-                cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
-                eps = torch.zeros(cov_mat_sqrt.size(0), 1).normal_().cuda() #rank-deficient normal results
-                w = mean + (scale/((self.max_num_models - 1) ** 0.5)) * cov_mat_sqrt.t().matmul(eps).view_as(mean)
+            if scale == 0.0:
+                w = mean
             else:
-                sq_mean = module.__getattr__('%s_sq_mean' % name)
-                eps = mean.new(mean.size()).normal_()
-                w = mean + scale * torch.sqrt(sq_mean - mean ** 2) * eps
+                #print('here cov is', cov)
+                if cov is True:
+                    #print(torch.norm(sample))
+                    w = mean + sample.view_as(mean)
+                else:
+                    sq_mean = module.__getattr__('%s_sq_mean' % name)
+                    eps = mean.new(mean.size()).normal_()
+                    w = mean + scale * torch.sqrt(sq_mean - mean ** 2) * eps
             module.__setattr__(name, w)
 
     def collect_model(self, base_model, bm=None):
@@ -116,6 +142,9 @@ class SWAG(torch.nn.Module):
                 
                 #first moment
                 mean = mean * self.n_models / (self.n_models + 1.0) + base_param.data / (self.n_models + 1.0)
+                if torch.sum(torch.isnan(mean)) > 0:
+                    print(mean)
+                    print(base_param.data)
 
                 #second moment
                 sq_mean = sq_mean * self.n_models / (self.n_models + 1.0) + base_param.data ** 2 / (self.n_models + 1.0)
@@ -174,106 +203,21 @@ class SWAG(torch.nn.Module):
             module.__setattr__(name, mean.new_tensor(w[k:k+s].reshape(mean.shape)))
             k += s
 
-    # def _load_from_different_state_dict(self, state_dict, prefix, strict, missing_keys, unexpected_keys, error_msgs):
-    #     r"""Copies parameters and buffers from :attr:`state_dict` into only
-    #     this module, but not its descendants. This is called on every submodule
-    #     in :meth:`~torch.nn.Module.load_state_dict`. Metadata saved for this
-    #     module in input :attr:`state_dict` is at ``state_dict._metadata[prefix]``.
-    #     Subclasses can achieve class-specific backward compatible loading using
-    #     the version number at ``state_dict._metadata[prefix]["version"]``.
+    def compute_logprob(self, diag=True, use_pars=True):
+        #currently only diagonal is implemented
+        logprob = 0.0
 
-    #     .. note::
-    #         :attr:`state_dict` is not the same object as the input
-    #         :attr:`state_dict` to :meth:`~torch.nn.Module.load_state_dict`. So
-    #         it can be modified.
-
-    #     Arguments:
-    #         state_dict (dict): a dict containing parameters and
-    #             persistent buffers.
-    #         prefix (str): the prefix for parameters and buffers used in this
-    #             module
-    #         strict (bool): whether to strictly enforce that the keys in
-    #             :attr:`state_dict` with :attr:`prefix` match the names of
-    #             parameters and buffers in this module
-    #         missing_keys (list of str): if ``strict=False``, add missing keys to
-    #             this list
-    #         unexpected_keys (list of str): if ``strict=False``, add unexpected
-    #             keys to this list
-    #         error_msgs (list of str): error messages should be added to this
-    #             list, and will be reported together in
-    #             :meth:`~torch.nn.Module.load_state_dict`
-    #     """
-    #     local_name_params = itertools.chain(self._parameters.items(), self._buffers.items())
-    #     local_state = {k: v.data for k, v in local_name_params if v is not None}
-
-    #     for name, param in local_state.items():
-    #         key = prefix + name
-    #         if key in state_dict:
-    #             input_param = state_dict[key]
-    #             if isinstance(input_param, torch.nn.Parameter):
-    #                 # backwards compatibility for serialized parameters
-    #                 input_param = input_param.data
-    #             try:
-    #                 param.resize_as_(input_param).copy_(input_param)
-    #             except Exception:
-    #                 error_msgs.append('While copying the parameter named "{}", '
-    #                                   'whose dimensions in the model are {} and '
-    #                                   'whose dimensions in the checkpoint are {}.'
-    #                                   .format(key, param.size(), input_param.size()))
-    #         elif strict:
-    #             missing_keys.append(key)
-
-    #     if strict:
-    #         for key, input_param in state_dict.items():
-    #             if key.startswith(prefix):
-    #                 input_name = key[len(prefix):]
-    #                 input_name = input_name.split('.', 1)[0]  # get the name of param/buffer/child
-    #                 if input_name not in self._modules and input_name not in local_state:
-    #                     unexpected_keys.append(key)
-
-    # def load_different_state_dict(self, state_dict, strict=True):
-    #     r"""Copies parameters and buffers from :attr:`state_dict` into
-    #     this module and its descendants. If :attr:`strict` is ``True``, then
-    #     the keys of :attr:`state_dict` must exactly match the keys returned
-    #     by this module's :meth:`~torch.nn.Module.state_dict` function.
-
-    #     Arguments:
-    #         state_dict (dict): a dict containing parameters and
-    #             persistent buffers.
-    #         strict (bool, optional): whether to strictly enforce that the keys
-    #             in :attr:`state_dict` match the keys returned by this module's
-    #             :meth:`~torch.nn.Module.state_dict` function. Default: ``True``
-    #     """
-    #     missing_keys = []
-    #     unexpected_keys = []
-    #     error_msgs = []
-
-    #     # copy state_dict so _load_from_state_dict can modify it
-    #     metadata = getattr(state_dict, '_metadata', None)
-    #     state_dict = state_dict.copy()
-    #     if metadata is not None:
-    #         state_dict._metadata = metadata
-
-    #     def load(module, prefix=''):
-    #         module._load_from_different_state_dict(
-    #             state_dict, prefix, strict, missing_keys, unexpected_keys, error_msgs)
-    #         for name, child in module._modules.items():
-    #             if child is not None:
-    #                 load(child, prefix + name + '.')
-
-    #     load(self)
-
-    #     if strict:
-    #         error_msg = ''
-    #         if len(unexpected_keys) > 0:
-    #             error_msgs.insert(
-    #                 0, 'Unexpected key(s) in state_dict: {}. '.format(
-    #                     ', '.join('"{}"'.format(k) for k in unexpected_keys)))
-    #         if len(missing_keys) > 0:
-    #             error_msgs.insert(
-    #                 0, 'Missing key(s) in state_dict: {}. '.format(
-    #                     ', '.join('"{}"'.format(k) for k in missing_keys)))
-
-    #     if len(error_msgs) > 0:
-    #         raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
-    #                            self.__class__.__name__, "\n\t".join(error_msgs)))
+        for (module, name) in self.params:
+            #[print(x) for x in module['params']]
+            #print(module.weight)
+            data = getattr(module, name)
+            if use_pars:
+                mean = module.__getattr__('%s_mean' % name)
+                sq_mean = module.__getattr__('%s_sq_mean' % name)
+                scale = torch.sqrt(sq_mean - mean.pow(2.0))
+            else:
+                mean = torch.zeros_like(data)
+                scale = torch.ones_like(data) * 0.0001
+            logprob += Normal(mean, scale).log_prob(data).sum()
+        
+        return logprob
