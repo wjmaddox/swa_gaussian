@@ -7,6 +7,7 @@ sys.path.append('..')
 
 from gpytorch.lazy import RootLazyTensor, DiagLazyTensor, AddedDiagLazyTensor
 from gpytorch.utils import pivoted_cholesky
+from gpytorch.distributions import MultivariateNormal
 
 class Test_LowRank_P_Diag(unittest.TestCase):
     def construct_A_D(self,N=400, p=40, seed = 1):
@@ -17,7 +18,7 @@ class Test_LowRank_P_Diag(unittest.TestCase):
 
         return A, D
 
-    def test_added_diag_lt(self,N=400,p=40):
+    def test_added_diag_lt(self,N=4000,p=40):
         A, D = self.construct_A_D(N=N,p=p)
 
         D_lt = RootLazyTensor(D)
@@ -26,21 +27,20 @@ class Test_LowRank_P_Diag(unittest.TestCase):
 
         lowrank_pdiag_lt = AddedDiagLazyTensor(diag_term, D_lt)
 
-        pivoted_l = pivoted_cholesky.pivoted_cholesky(lowrank_pdiag_lt, 100)
+        z = torch.randn(N)
+        mean = torch.ones(N)
 
-        pivoted_llt = pivoted_l.t().matmul(pivoted_l)
-        print(pivoted_llt.size())
-        approx_error = torch.norm( pivoted_llt - lowrank_pdiag_lt.evaluate() ) / lowrank_pdiag_lt.evaluate().norm() 
-        print(approx_error)
-        #z = torch.randn(N)
+        lazydist = MultivariateNormal(mean, lowrank_pdiag_lt)
+        lazy_lprob = lazydist.log_prob(z)
 
-        #pchol_rsample = pivoted_l.matmul(z)
+        exact_dist = torch.distributions.MultivariateNormal(mean, lowrank_pdiag_lt.evaluate())
+        exact_lprob = exact_dist.log_prob(z)
 
-        #true_chol = torch.potrf(lowrank_pdiag_lt.evaluate(), upper = False)
-        #print(true_chol.size(), pivoted_l.size())
-        #true_rsample = true_chol.matmul(z)
+        rel_error = torch.norm( lazy_lprob - exact_lprob ) / exact_lprob.norm()
 
-        #print( (pchol_rsample - true_rsample).norm() / true_rsample.norm() )
+        self.assertLess(rel_error.cpu().item(), 0.01)
+
+
 
 
 if __name__ == "__main__":
