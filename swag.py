@@ -26,11 +26,7 @@ def swag_parameters(module, params, no_cov_mat=True, num_models=0):
         module.register_buffer('%s_sq_mean' % name, data.new(data.size()).zero_())
 
         if no_cov_mat is False:
-            if int(torch.__version__.split('.')[1]) >= 4:
-                #print('max size of cov_mat_sqrt:', num_models, data.numel())
-                module.register_buffer('%s_cov_mat_sqrt' % name, torch.zeros(num_models,data.numel()).cuda())
-            else:
-                module.register_buffer('%s_cov_mat_sqrt' % name, Variable(torch.zeros(num_models,data.numel()).cuda()))
+            module.register_buffer('%s_cov_mat_sqrt' % name, torch.zeros(num_models,data.numel()).cuda())
 
         params.append((module, name))
 

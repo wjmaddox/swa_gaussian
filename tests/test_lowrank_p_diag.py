@@ -14,11 +14,11 @@ class Test_LowRank_P_Diag(unittest.TestCase):
         torch.manual_seed(seed)
 
         D = torch.randn(N, p)
-        A = torch.randn(N).abs() * 1e-3 + 3.0
+        A = torch.randn(N).abs() * 1e-3 + 0.1
 
         return A, D
 
-    def test_added_diag_lt(self,N=4000,p=40):
+    def test_added_diag_lt(self,N=10000,p=20):
         A, D = self.construct_A_D(N=N,p=p)
 
         #this is a lazy tensor for DD'
