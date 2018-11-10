@@ -9,6 +9,8 @@ import models
 import swag
 
 import copy
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 from gpytorch.lazy import RootLazyTensor, DiagLazyTensor, AddedDiagLazyTensor
 from gpytorch.distributions import MultivariateNormal
@@ -49,16 +51,16 @@ swag_model.sample(scale=1.0, cov=True, seed=1107)
 param_list = [getattr(param, name) for param, name in swag_model.params]
 
 def compute_ll_for_block(vec, mean, var, cov_mat_root):
-    vec = flatten(vec).contiguous().cpu()
-    mean = flatten(mean).contiguous().cpu()
-    var = flatten(var).contiguous().cpu()
-    cov_mat_root = cov_mat_root.contiguous().cpu()
-    
+    #vec = flatten(old_vec).contiguous()
+    vec = flatten(vec)
+    mean = flatten(mean)
+    var = flatten(var)
+
     cov_mat_lt = RootLazyTensor(cov_mat_root.t())
     var_lt = DiagLazyTensor(var + 1e-6)
     covar_lt = AddedDiagLazyTensor(var_lt, cov_mat_lt)
     qdist = MultivariateNormal(mean, covar_lt)
-    with gpytorch.settings.max_preconditioner_size(20) and gpytorch.settings.max_cg_iterations(100) and gpytorch.settings.max_root_decomposition_size(99):
+    with gpytorch.settings.num_trace_samples(1) and gpytorch.settings.max_cg_iterations(25):
         return qdist.log_prob(vec)
 
 def block_logll(param_list):
@@ -71,10 +73,11 @@ def block_logll(param_list):
     return full_logprob
 
 def full_logll(param_list):
-    cov_mat_root = torch.cat(cov_mat_root_list,dim=1).contiguous().cpu()
-    mean_vector = flatten(mean_list).contiguous().cpu()
-    var_vector = flatten(var_list).contiguous().cpu()
-    param_vector =flatten(param_list).contiguous().cpu()
+    cov_mat_root = torch.cat(cov_mat_root_list,dim=1)[-10:,:]
+    print(cov_mat_root.size())
+    mean_vector = flatten(mean_list)
+    var_vector = flatten(var_list)
+    param_vector = flatten(param_list)
     return compute_ll_for_block(param_vector, mean_vector, var_vector, cov_mat_root)
     
 
