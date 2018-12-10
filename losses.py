@@ -14,6 +14,9 @@ def adversarial_cross_entropy(model, input, target, lossfn = F.cross_entropy, ep
     #loss function based on algorithm 1 of "simple and scalable uncertainty estimation using
     # deep ensembles," lakshminaraynan, pritzel, and blundell, nips 2017, 
     # https://arxiv.org/pdf/1612.01474.pdf
+    # note: the small difference bw this paper is that here the loss is only backpropped
+    # through the adversarial loss rather than both due to memory constraints on preresnets
+    # we can change back if we want to restrict ourselves to VGG-like networks (where it's fine).
 
     #scale epsilon by min and max (should be [0,1] for all experiments)
     #see algorithm 1 of paper
