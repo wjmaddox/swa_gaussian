@@ -27,19 +27,23 @@ def adversarial_cross_entropy(model, input, target, lossfn = F.cross_entropy, ep
     loss = lossfn(output, target)
 
     #now compute gradients wrt input
-    loss.backward(retain_gradients = True)
+    loss.backward()
         
     #now compute sign of gradients
     inputs_grad = torch.sign(input.grad)
     
     #perturb inputs and use clamped output
     inputs_perturbed = torch.clamp(input + scaled_epsilon * inputs_grad, 0.0, 1.0)
+
+    input.grad.zero_()
+    model.zero_grad()
+
     outputs_perturbed = model(inputs_perturbed)
     
     #compute adversarial version of loss
     adv_loss = lossfn(outputs_perturbed, target)
 
     #return mean of loss for reasonable scalings
-    return (loss + adv_loss)/2.0, output
+    return adv_loss, output
 
 
