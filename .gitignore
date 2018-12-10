@@ -67,14 +67,12 @@ target/
 #Idea
 .idea*
 
-# others 
-._*
 *.npz
-*._*.png
-
 *.png
-*.sh
-*.eps
-*.pdf
+._*
 *.out
+*.log
+*.eps
+*.sh
+*.pdf
 .DS_Store

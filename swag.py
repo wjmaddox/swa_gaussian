@@ -26,11 +26,7 @@ def swag_parameters(module, params, no_cov_mat=True, num_models=0):
         module.register_buffer('%s_sq_mean' % name, data.new(data.size()).zero_())
 
         if no_cov_mat is False:
-            if int(torch.__version__.split('.')[1]) >= 4:
-                #print('max size of cov_mat_sqrt:', num_models, data.numel())
-                module.register_buffer('%s_cov_mat_sqrt' % name, torch.zeros(num_models,data.numel()).cuda())
-            else:
-                module.register_buffer('%s_cov_mat_sqrt' % name, Variable(torch.zeros(num_models,data.numel()).cuda()))
+            module.register_buffer('%s_cov_mat_sqrt' % name, torch.zeros(num_models,data.numel()).cuda())
 
         params.append((module, name))
 
@@ -55,10 +51,36 @@ class SWAG(torch.nn.Module):
     def forward(self, input):
         return self.base(input)
 
-    def sample(self, scale=1.0, cov=False, seed=None):
+    def sample(self, scale=1.0, cov=False, seed=None, block = False):
         if seed is not None:
             torch.manual_seed(seed)
 
+        if not block:
+            self.sample_fullrank(scale, cov)
+        else:
+            self.sample_blockwise(scale, cov)
+    
+    def sample_blockwise(self, scale, cov):
+        for module, name in self.params:
+            mean = module.__getattr__('%s_mean' % name)
+            if cov is True:
+                cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
+                eps = torch.zeros(cov_mat_sqrt.size(0), 1).normal_().cuda() #rank-deficient normal results
+                cov_sample = (scale/((self.max_num_models - 1) ** 0.5)) * cov_mat_sqrt.t().matmul(eps).view_as(mean)
+
+                sq_mean = module.__getattr__('%s_sq_mean' % name)
+                eps = mean.new(mean.size()).normal_()
+                diag_sample = scale * torch.sqrt(sq_mean - mean ** 2) * eps
+                
+                w = mean + diag_sample + cov_sample
+
+            else:
+                sq_mean = module.__getattr__('%s_sq_mean' % name)
+                eps = mean.new(mean.size()).normal_()
+                w = mean + scale * torch.sqrt(sq_mean - mean ** 2) * eps
+            module.__setattr__(name, w)
+
+    def sample_fullrank(self, scale, cov):
         #different sampling procedure to prevent block based gaussians from being sampled
         if cov is True and scale != 0.0:
             #combine all cov mats into a list
@@ -92,8 +114,12 @@ class SWAG(torch.nn.Module):
             else:
                 #print('here cov is', cov)
                 if cov is True:
-                    #print(torch.norm(sample))
-                    w = mean + sample.view_as(mean)
+                    sq_mean = module.__getattr__('%s_sq_mean' % name)
+                    eps = mean.new(mean.size()).normal_()
+
+                    #see Section 3.3 of variational boosting
+                    #Cov(D'z_1 + sigma I z_2) = DD' + sigma I
+                    w = mean + sample.view_as(mean) + torch.sqrt(sq_mean - mean ** 2) * eps
                 else:
                     sq_mean = module.__getattr__('%s_sq_mean' % name)
                     eps = mean.new(mean.size()).normal_()
