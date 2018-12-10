@@ -23,35 +23,21 @@ def save_checkpoint(dir, epoch, name='checkpoint', **kwargs):
     torch.save(state, filepath)
 
 
-def train_epoch(loader, model, criterion, optimizer, batch_means=False):
+def train_epoch(loader, model, criterion, optimizer):
     loss_sum = 0.0
     correct = 0.0
 
     model.train()
 
-    #zero means before batch begins
-    if batch_means:
-        #curr_mem_usage = torch.cuda.memory_allocated()
-        avg_params = list()
-        for param in model.parameters():
-            avg_params.append(copy.deepcopy(param))
-        #new_mem_usage = torch.cuda.memory_allocated() - curr_mem_usage
-        #print(new_mem_usage/(1024.0 ** 3))
-
     for i, (input, target) in enumerate(loader):
         input = input.cuda(async=True)
         target = target.cuda(async=True)
 
-        output = model(input)
-        loss = criterion(output, target)
+        loss, output = criterion(model, input, target)
         
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
-        if batch_means:
-            for j, (avg, param) in enumerate(zip(avg_params, model.parameters())):
-                avg_params[j] = i/(i+1) * avg.data + 1/(i+1) * param.data
             
         loss_sum += loss.data.item() * input.size(0)
         
@@ -61,16 +47,10 @@ def train_epoch(loader, model, criterion, optimizer, batch_means=False):
         if criterion.__name__ == 'mse_loss':
             correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
     
-    if batch_means:
-        return avg_params, {
-            'loss': loss_sum / len(loader.dataset),
-            'accuracy': correct / len(loader.dataset) * 100.0,
-        }
-    else:
-        return {
-            'loss': loss_sum / len(loader.dataset),
-            'accuracy': correct / len(loader.dataset) * 100.0,
-        }
+    return {
+        'loss': loss_sum / len(loader.dataset),
+        'accuracy': correct / len(loader.dataset) * 100.0,
+    }
 
 
 def eval(loader, model, criterion):
@@ -83,8 +63,7 @@ def eval(loader, model, criterion):
         input = input.cuda(async=True)
         target = target.cuda(async=True)
 
-        output = model(input)
-        loss = criterion(output, target)
+        loss, output = criterion(model, input, target)
 
         loss_sum += loss.item() * input.size(0)
 

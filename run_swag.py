@@ -10,6 +10,7 @@ import models
 import utils
 import tabulate
 import swag
+import losses
 
 
 parser = argparse.ArgumentParser(description='SGD/SWA training')
@@ -112,21 +113,11 @@ def schedule(epoch):
         factor = lr_ratio
     return args.lr_init * factor
 
+# use a slightly modified loss function that allows input of model 
 if args.loss == 'CE':
-    criterion = F.cross_entropy
-else:
-    N = loaders['train'].dataset.__len__()
-    def criterion(output, target):
-        #IG(scale | 1,1) for noise - to add some regularization
-        scale = model.log_noise
-        scale_dist = torch.distributions.gamma.Gamma(torch.ones(1).to(args.device), torch.ones(1).to(args.device))
-
-        #N(target | input, scale)
-        mse_dist = torch.distributions.normal.Normal(loc=output, scale=scale.expand_as(target))
-        loss = N * mse_dist.log_prob(target).sum() + scale_dist.log_prob(scale.pow(-2))
-        #print(-loss, scale, len(target))
-        return -loss/len(target)
-    #criterion = F.mse_loss
+    criterion = losses.cross_entropy
+elif args.loss == 'adv_CE':
+    criterion = losses.adversarial_cross_entropy
     
 optimizer = torch.optim.SGD(
     model.parameters(),
@@ -172,9 +163,8 @@ for epoch in range(start_epoch, args.epochs):
         lr = args.lr_init
     
     if (args.swa and (epoch + 1) > args.swa_start) and args.cov_mat:
-        model_batch_means, train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, batch_means=True)
+        train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer)
     else:
-        model_batch_means = None
         train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer)
 
     if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
@@ -183,8 +173,7 @@ for epoch in range(start_epoch, args.epochs):
         test_res = {'loss': None, 'accuracy': None}
 
     if args.swa and (epoch + 1) > args.swa_start and (epoch + 1 - args.swa_start) % args.swa_c_epochs == 0:
-        swag_model.collect_model(model, bm=model_batch_means)
-        del model_batch_means
+        swag_model.collect_model(model)
         if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
             swag_model.sample(0.0)
             utils.bn_update(loaders['train'], swag_model)
