@@ -9,6 +9,44 @@ c10_classes = np.array([
     [3, 4, 5, 6, 7]
 ], dtype=np.int32)
 
+def svhn_loaders(path, batch_size, num_workers, transform_train, transform_test, use_validation, val_size, shuffle_train=True):
+    train_set = torchvision.datasets.SVHN(root=path, split='train', download = True, transform = transform_train)
+
+    if use_validation:
+        test_set = torchvision.datasets.SVHN(root=path, split='train', download = True, transform = transform_test)
+        train_set.data = train_set.data[:-val_size]
+        train_set.labels = train_set.labels[:-val_size]
+
+        test_set.data = test_set.data[-val_size:]
+        test_set.labels = test_set.labels[-val_size:]
+
+    else:
+        print('You are going to run models on the test set. Are you sure?')
+        test_set = torchvision.datasets.SVHN(root=path, split='test', download = True, transform = transform_test)
+
+    num_classes = 10
+
+    return \
+        {
+            'train': torch.utils.data.DataLoader(
+                train_set,
+                batch_size=batch_size,
+                shuffle=True and shuffle_train,
+                num_workers=num_workers,
+                pin_memory=True
+            ),
+            'test': torch.utils.data.DataLoader(
+                test_set,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=num_workers,
+                pin_memory=True
+            ),
+        }, \
+        num_classes
+    
+
+
 def loaders(dataset, path, batch_size, num_workers, transform_train, transform_test, use_validation=True, val_size=5000, split_classes=None, shuffle_train=True):
 
     regression_problem = False
@@ -23,6 +61,11 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
             regression_problem = True
             
     path = os.path.join(path, dataset.lower())
+
+    #svhn is quite a bit different than the rest
+    if dataset == 'SVHN':
+        return svhn_loaders(path, batch_size, num_workers, transform_train, transform_test, use_validation, val_size)
+
     train_set = ds(root=path, train=True, download=True, transform=transform_train)
 
     if use_validation:
@@ -32,8 +75,8 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
 
         test_set = ds(root=path, train=True, download=True, transform=transform_test)
         test_set.train = False
-        test_set.test_data = test_set.train_data[-5000:]
-        test_set.test_labels = test_set.train_labels[-5000:]
+        test_set.test_data = test_set.train_data[-val_size:]
+        test_set.test_labels = test_set.train_labels[-val_size:]
         delattr(test_set, 'train_data')
         delattr(test_set, 'train_labels')
     else:

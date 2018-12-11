@@ -41,11 +41,11 @@ def train_epoch(loader, model, criterion, optimizer):
             
         loss_sum += loss.data.item() * input.size(0)
         
-        if criterion.__name__ == 'cross_entropy':
-            pred = output.data.argmax(1, keepdim=True)
-            correct += pred.eq(target.data.view_as(pred)).sum().item()
-        if criterion.__name__ == 'mse_loss':
-            correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
+        #if criterion.__name__ == 'cross_entropy':
+        pred = output.data.argmax(1, keepdim=True)
+        correct += pred.eq(target.data.view_as(pred)).sum().item()
+        """if criterion.__name__ == 'mse_loss':
+            correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()"""
     
     return {
         'loss': loss_sum / len(loader.dataset),
@@ -67,11 +67,11 @@ def eval(loader, model, criterion):
 
         loss_sum += loss.item() * input.size(0)
 
-        if criterion.__name__ == 'cross_entropy':
-            pred = output.data.argmax(1, keepdim=True)
-            correct += pred.eq(target.data.view_as(pred)).sum().item()
-        if criterion.__name__ == 'mse_loss':
-            correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
+        #if criterion.__name__ == 'cross_entropy':
+        pred = output.data.argmax(1, keepdim=True)
+        correct += pred.eq(target.data.view_as(pred)).sum().item()
+        #if criterion.__name__ == 'mse_loss':
+        #    correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
 
     return {
         'loss': loss_sum / len(loader.dataset),
