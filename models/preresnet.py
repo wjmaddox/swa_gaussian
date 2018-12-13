@@ -7,7 +7,7 @@ import torch.nn as nn
 import torchvision.transforms as transforms
 import math
 
-__all__ = ['PreResNet110', 'PreResNet56', 'PreResNet8']
+__all__ = ['PreResNet110', 'PreResNet56', 'PreResNet8', 'PreResNet164']
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -145,6 +145,20 @@ class PreResNet(nn.Module):
 
         return x
 
+class PreResNet164:
+    base = PreResNet
+    args = list()
+    kwargs = {'depth': 164}
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ])
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ])
 
 class PreResNet110:
     base = PreResNet

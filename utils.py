@@ -30,8 +30,8 @@ def train_epoch(loader, model, criterion, optimizer):
     model.train()
 
     for i, (input, target) in enumerate(loader):
-        input = input.cuda(async=True)
-        target = target.cuda(async=True)
+        input = input.cuda(non_blocking=True)
+        target = target.cuda(non_blocking=True)
 
         loss, output = criterion(model, input, target)
         
@@ -59,19 +59,21 @@ def eval(loader, model, criterion):
 
     model.eval()
 
-    for i, (input, target) in enumerate(loader):
-        input = input.cuda(async=True)
-        target = target.cuda(async=True)
+    with torch.no_grad():
+        for i, (input, target) in enumerate(loader):
+            input = input.cuda(non_blocking=True)
+            target = target.cuda(non_blocking=True)
 
-        loss, output = criterion(model, input, target)
+            output = model(input)
+            loss = criterion(output, target)
 
-        loss_sum += loss.item() * input.size(0)
+            loss_sum += loss.item() * input.size(0)
 
-        #if criterion.__name__ == 'cross_entropy':
-        pred = output.data.argmax(1, keepdim=True)
-        correct += pred.eq(target.data.view_as(pred)).sum().item()
-        #if criterion.__name__ == 'mse_loss':
-        #    correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
+            #if criterion.__name__ == 'cross_entropy':
+            pred = output.data.argmax(1, keepdim=True)
+            correct += pred.eq(target.data.view_as(pred)).sum().item()
+            #if criterion.__name__ == 'mse_loss':
+            #    correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
 
     return {
         'loss': loss_sum / len(loader.dataset),
@@ -128,7 +130,7 @@ def bn_update(loader, model, **kwargs):
     model.apply(lambda module: _get_momenta(module, momenta))
     n = 0
     for input, _ in loader:
-        input = input.cuda(async=True)
+        input = input.cuda(non_blocking=True)
         input_var = torch.autograd.Variable(input)
         b = input_var.data.size(0)
 
@@ -160,8 +162,8 @@ def fast_ensembling(loaders, swa_model, criterion, samples = 10, cov=True, scale
     seed_base = int(datetime.now().timestamp())
 
     for (input, target) in loaders['test']:
-        input = input.cuda(async=True)
-        target = target.cuda(async=True)
+        input = input.cuda(non_blocking=True)
+        target = target.cuda(non_blocking=True)
 
         full_output_prob = 0.0
         for i in range(samples):
@@ -242,8 +244,8 @@ def fast_importance_sampling(loaders, swa_model, criterion, samples = 10, cov=Tr
     #print(LogSumExp(log_weights))
 
     for (input, target) in loaders['test']:
-        input = input.cuda(async=True)
-        target = target.cuda(async=True)
+        input = input.cuda(non_blocking=True)
+        target = target.cuda(non_blocking=True)
         
         full_output_logprob = torch.zeros(samples, input.size(0), target.max() + 1).cuda()
         for i in range(samples):
