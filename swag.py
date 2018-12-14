@@ -2,6 +2,13 @@ import torch
 import numpy as np
 import itertools
 from torch.distributions.normal import Normal
+import copy
+
+import gpytorch
+from gpytorch.lazy import RootLazyTensor, DiagLazyTensor, AddedDiagLazyTensor
+from gpytorch.distributions import MultivariateNormal
+
+from utils import flatten
 
 def unflatten_like(vector, likeTensorList):
     # Takes a flat torch.tensor and unflattens it to a list of torch.tensors
@@ -126,80 +133,33 @@ class SWAG(torch.nn.Module):
                     w = mean + scale * torch.sqrt(sq_mean - mean ** 2) * eps
             module.__setattr__(name, w)
 
-    def collect_model(self, base_model, bm=None):
-        #print(self.n_models)
-        if bm is None:
-            for (module, name), base_param in zip(self.params, base_model.parameters()):
-                mean = module.__getattr__('%s_mean' % name)
-                sq_mean = module.__getattr__('%s_sq_mean' % name)
-                
-                #first moment
-                mean = mean * self.n_models / (self.n_models + 1.0) + base_param.data / (self.n_models + 1.0)
+    def collect_model(self, base_model):
+        for (module, name), base_param in zip(self.params, base_model.parameters()):
+            mean = module.__getattr__('%s_mean' % name)
+            sq_mean = module.__getattr__('%s_sq_mean' % name)
+            
+            #first moment
+            mean = mean * self.n_models / (self.n_models + 1.0) + base_param.data / (self.n_models + 1.0)
 
-                #second moment
-                sq_mean = sq_mean * self.n_models / (self.n_models + 1.0) + base_param.data ** 2 / (self.n_models + 1.0)
+            #second moment
+            sq_mean = sq_mean * self.n_models / (self.n_models + 1.0) + base_param.data ** 2 / (self.n_models + 1.0)
 
-                #square root of covariance matrix
-                if self.no_cov_mat is False:
-                    cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
-                    
-                    #block covariance matrices, store deviation from current mean
-                    if bm is not None:
-                        dev = (bm_param - mean).view(-1,1)
-                    else:
-                        dev = (base_param.data - mean).view(-1,1)
-                    #print(cov_mat_sqrt.size(), dev.size())
-                    cov_mat_sqrt = torch.cat((cov_mat_sqrt, dev.view(-1,1).t()),dim=0)
-
-                    #print(cov_mat_sqrt.size())
-                    #remove first column if we have stored too many models
-                    if (self.n_models+1) > self.max_num_models:
-                        cov_mat_sqrt = cov_mat_sqrt[1:, :]
-                        #print(cov_mat_sqrt.size())
-                    module.__setattr__('%s_cov_mat_sqrt' % name, cov_mat_sqrt)
-
-                module.__setattr__('%s_mean' % name, mean)
-                module.__setattr__('%s_sq_mean' % name, sq_mean)
-            self.n_models.add_(1.0)
-        else:
-            for (module, name), base_param, bp_value in zip(self.params, base_model.parameters(), bm):
-                mean = module.__getattr__('%s_mean' % name)
-                sq_mean = module.__getattr__('%s_sq_mean' % name)
-                
-                #first moment
-                mean = mean * self.n_models / (self.n_models + 1.0) + base_param.data / (self.n_models + 1.0)
-                if torch.sum(torch.isnan(mean)) > 0:
-                    print(mean)
-                    print(base_param.data)
-
-                #second moment
-                sq_mean = sq_mean * self.n_models / (self.n_models + 1.0) + base_param.data ** 2 / (self.n_models + 1.0)
-
-                #square root of covariance matrix
-                #if self.no_cov_mat is False:
+            #square root of covariance matrix
+            if self.no_cov_mat is False:
                 cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
                 
                 #block covariance matrices, store deviation from current mean
-                #if bm is not None:
-                
-                #print(torch.sum(base_param.data - bp_value))
-                dev = (bp_value - mean).view(-1,1)
-                #else:
-                #    dev = (base_param.data - mean).view(-1,1)
-                #print(cov_mat_sqrt.size(), dev.size())
+                dev = (base_param.data - mean).view(-1,1)
                 cov_mat_sqrt = torch.cat((cov_mat_sqrt, dev.view(-1,1).t()),dim=0)
 
-                #print(cov_mat_sqrt.size())
                 #remove first column if we have stored too many models
                 if (self.n_models+1) > self.max_num_models:
                     cov_mat_sqrt = cov_mat_sqrt[1:, :]
-                    #print(cov_mat_sqrt.size())
                 module.__setattr__('%s_cov_mat_sqrt' % name, cov_mat_sqrt)
 
-                module.__setattr__('%s_mean' % name, mean)
-                module.__setattr__('%s_sq_mean' % name, sq_mean)
-            self.n_models.add_(1.0)
-            del bm
+            module.__setattr__('%s_mean' % name, mean)
+            module.__setattr__('%s_sq_mean' % name, sq_mean)
+        self.n_models.add_(1.0)
 
     def export_numpy_params(self, export_cov_mat=False):
         mean_list = []
@@ -216,7 +176,6 @@ class SWAG(torch.nn.Module):
         var = sq_mean - np.square(mean)
 
         if export_cov_mat:
-            #cov_mat = np.concatenate(cov_mat_list)
             return mean, var, cov_mat_list
         else:
             return mean, var
@@ -229,21 +188,82 @@ class SWAG(torch.nn.Module):
             module.__setattr__(name, mean.new_tensor(w[k:k+s].reshape(mean.shape)))
             k += s
 
-    def compute_logprob(self, diag=True, use_pars=True):
-        #currently only diagonal is implemented
-        logprob = 0.0
+    def generate_mean_var_covar(self):
+        mean_list = []
+        var_list = []
+        cov_mat_root_list = []
+        for module, name in self.params:
+            mean = module.__getattr__('%s_mean' % name)
+            sq_mean = module.__getattr__('%s_sq_mean' % name)
+            cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
+            
+            mean_list.append(mean)
+            var_list.append(sq_mean - mean ** 2.0)
+            cov_mat_root_list.append(cov_mat_sqrt)
+        return mean_list, var_list, cov_mat_root_list
 
-        for (module, name) in self.params:
-            #[print(x) for x in module['params']]
-            #print(module.weight)
-            data = getattr(module, name)
-            if use_pars:
-                mean = module.__getattr__('%s_mean' % name)
-                sq_mean = module.__getattr__('%s_sq_mean' % name)
-                scale = torch.sqrt(sq_mean - mean.pow(2.0))
-            else:
-                mean = torch.zeros_like(data)
-                scale = torch.ones_like(data) * 0.0001
-            logprob += Normal(mean, scale).log_prob(data).sum()
+    def compute_ll_for_block(self, vec, mean, var, cov_mat_root):
+        vec = flatten(vec)
+        mean = flatten(mean)
+        var = flatten(var)
+
+        cov_mat_lt = RootLazyTensor(cov_mat_root.t())
+        var_lt = DiagLazyTensor(var + 1e-6)
+        covar_lt = AddedDiagLazyTensor(var_lt, cov_mat_lt)
+        qdist = MultivariateNormal(mean, covar_lt)
+
+        with gpytorch.settings.num_trace_samples(1) and gpytorch.settings.max_cg_iterations(25):
+            return qdist.log_prob(vec)
+
+    def block_logdet(self, var, cov_mat_root):
+        var = flatten(var)
+
+        cov_mat_lt = RootLazyTensor(cov_mat_root.t())
+        var_lt = DiagLazyTensor(var + 1e-6)
+        covar_lt = AddedDiagLazyTensor(var_lt, cov_mat_lt)
+
+        return covar_lt.log_det()
+
+    def block_logll(self,param_list, mean_list, var_list, cov_mat_root_list):
+        full_logprob = 0
+        for i, (param, mean, var, cov_mat_root) in enumerate(zip(param_list, mean_list, var_list, cov_mat_root_list)):
+            #print('Block: ', i)
+            block_ll = self.compute_ll_for_block(param, mean, var, cov_mat_root)
+            full_logprob += block_ll
+
+        return full_logprob
+
+    def full_logll(self,param_list, mean_list, var_list, cov_mat_root_list):
+        cov_mat_root = torch.cat(cov_mat_root_list,dim=1)
+        mean_vector = flatten(mean_list)
+        var_vector = flatten(var_list)
+        param_vector = flatten(param_list)
+        return self.compute_ll_for_block(param_vector, mean_vector, var_vector, cov_mat_root)
+
+    def compute_logdet(self, block=False):
+        _, var_list, covar_mat_root_list = self.generate_mean_var_covar()
+
+        if block:
+            full_logdet = 0
+            for (var, cov_mat_root) in zip(var_list, covar_mat_root_list):
+                block_logdet = self.block_logdet(var, cov_mat_root)
+                full_logdet += block_logdet
+        else:
+            var_vector = flatten(var_list)
+            cov_mat_root = torch.cat(covar_mat_root_list,dim=1)
+            full_logdet = self.block_logdet(var_vector, cov_mat_root)
+
+        return full_logdet
+
+    def compute_logprob(self, vec=None, block=False):
+        mean_list, var_list, covar_mat_root_list = self.generate_mean_var_covar()
+
+        if vec is None:
+            param_list = [getattr(param, name) for param, name in self.params]
+        else:
+            param_list = unflatten_like(vec, mean_list)
         
-        return logprob
+        if block is True:
+            return self.block_logll(param_list,mean_list, var_list, covar_mat_root_list)
+        else:
+            return self.full_logll(param_list,mean_list, var_list, covar_mat_root_list)

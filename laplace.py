@@ -94,8 +94,8 @@ class Laplace(torch.nn.Module):
         for s in range(samples):
             t_s = time.time()
             for input, target in loader:
-                input = input.cuda(async=True)
-                target = target.cuda(async=True)
+                input = input.cuda(non_blocking=True)
+                target = target.cuda(non_blocking=True)
 
                 output = self(input)
                 distribution = torch.distributions.Categorical(logits=output)

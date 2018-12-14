@@ -74,13 +74,17 @@ if args.method == 'Laplace' and args.scale < 0.0:
 predictions = np.zeros((len(loaders['test'].dataset), num_classes))
 targets = np.zeros(len(loaders['test'].dataset))
 print(targets.size)
+
 for i in range(args.N):
     print('%d/%d' % (i + 1, args.N))
-    model.train()
+    #model.train()
     model.sample(scale=args.scale, cov = args.cov_mat)
+    model.eval()
+    #perform batch norm update with training data
+    utils.bn_update(loaders['train'], model)
     k = 0
     for input, target in tqdm.tqdm(loaders['test']):
-        input = input.cuda(async=True)
+        input = input.cuda(non_blocking=True)
         output = model(input)
 
         predictions[k:k+input.size()[0]] += F.softmax(output, dim=1).cpu().numpy()

@@ -4,6 +4,10 @@ import copy
 from datetime import datetime
 import math
 
+def flatten(lst):
+    tmp = [i.contiguous().view(-1,1) for i in lst]
+    return torch.cat(tmp).view(-1)
+
 def LogSumExp(x,dim=0):
     m,_ = torch.max(x,dim=dim,keepdim=True)
     return m + torch.log((x - m).exp().sum(dim=dim,keepdim=True))
@@ -30,10 +34,11 @@ def train_epoch(loader, model, criterion, optimizer):
     model.train()
 
     for i, (input, target) in enumerate(loader):
-        input = input.cuda(async=True)
-        target = target.cuda(async=True)
+        input = input.cuda(non_blocking=True)
+        target = target.cuda(non_blocking=True)
 
-        loss, output = criterion(model, input, target)
+        output = model(input)
+        loss, output = criterion(output, target)
         
         optimizer.zero_grad()
         loss.backward()
@@ -60,10 +65,11 @@ def eval(loader, model, criterion):
     model.eval()
 
     for i, (input, target) in enumerate(loader):
-        input = input.cuda(async=True)
-        target = target.cuda(async=True)
+        input = input.cuda(non_blocking=True)
+        target = target.cuda(non_blocking=True)
 
-        loss, output = criterion(model, input, target)
+        output = model(input)
+        loss = criterion(output, target)
 
         loss_sum += loss.item() * input.size(0)
 
@@ -128,7 +134,7 @@ def bn_update(loader, model, **kwargs):
     model.apply(lambda module: _get_momenta(module, momenta))
     n = 0
     for input, _ in loader:
-        input = input.cuda(async=True)
+        input = input.cuda(non_blocking=True)
         input_var = torch.autograd.Variable(input)
         b = input_var.data.size(0)
 
@@ -160,8 +166,8 @@ def fast_ensembling(loaders, swa_model, criterion, samples = 10, cov=True, scale
     seed_base = int(datetime.now().timestamp())
 
     for (input, target) in loaders['test']:
-        input = input.cuda(async=True)
-        target = target.cuda(async=True)
+        input = input.cuda(non_blocking=True)
+        target = target.cuda(non_blocking=True)
 
         full_output_prob = 0.0
         for i in range(samples):
@@ -242,8 +248,8 @@ def fast_importance_sampling(loaders, swa_model, criterion, samples = 10, cov=Tr
     #print(LogSumExp(log_weights))
 
     for (input, target) in loaders['test']:
-        input = input.cuda(async=True)
-        target = target.cuda(async=True)
+        input = input.cuda(non_blocking=True)
+        target = target.cuda(non_blocking=True)
         
         full_output_logprob = torch.zeros(samples, input.size(0), target.max() + 1).cuda()
         for i in range(samples):
