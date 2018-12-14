@@ -67,6 +67,7 @@ target/
 #Idea
 .idea*
 
+*.pt
 *.npz
 *.png
 ._*
