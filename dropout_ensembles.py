@@ -141,7 +141,7 @@ def run_ensembles(samples, reps=args.replications):
         current_list.append([samples, eval_dropout(loaders, model, criterion, samples=samples)])
     return current_list
 
-samples_list = [3, 10, 30]
+samples_list = [1, 3, 10, 20, 30]
 
 for i, sample in enumerate(samples_list):
     drop_current_list = run_ensembles(sample)

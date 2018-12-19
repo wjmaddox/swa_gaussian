@@ -64,8 +64,7 @@ def eval(loader, model, criterion):
             input = input.cuda(non_blocking=True)
             target = target.cuda(non_blocking=True)
 
-            output = model(input)
-            loss = criterion(output, target)
+            loss, output = criterion(model, input, target)
 
             loss_sum += loss.item() * input.size(0)
 
