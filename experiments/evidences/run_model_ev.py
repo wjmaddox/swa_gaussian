@@ -9,7 +9,7 @@ import tabulate
 import itertools
 
 
-from swag import data, models, utils
+from swag import data, losses, models, utils
 from swag.posteriors import evidences, SWAG
 
 parser = argparse.ArgumentParser(description='SGD/SWA/SWAG ensembling')
@@ -82,7 +82,7 @@ swag_model.load_state_dict(swag_checkpoint['state_dict'], strict = False)
 #will be trying four different methods 
 #sgd, swa, swag, swag + outerproduct (later)
 
-criterion = F.cross_entropy
+criterion = losses.cross_entropy
 
 #sgd_results, swa_results, swag_1sample_results, swag_3samples_results, swag_10samples_results = [],[],[],[], []
 columns = ['model', 'samples', 'cov', 'acc', 'acc_sd', 'te_loss', 'te_loss_sd']
@@ -132,13 +132,14 @@ laplace_result = evidences.log_marginal_laplace(log_swa_results_dict['log_joint'
 bartlett_result = evidences.log_marginal_bartlett(log_swa_results_dict['log_joint'], log_determinant, numparams, 
                                                     log_prob_results_dict['log_joint'], args.samples)
 
-print(laplace_result, bartlett_result)
-
 is_result = evidences.log_marginal_is(log_prob_results_dict['log_ll'], log_prob_results_dict['log_prior'].t(), log_prob_results_dict['log_q'], args.samples)
 
 elbo_result = evidences.log_marginal_elbo(log_prob_results_dict['log_joint'], args.samples, numparams, log_determinant, swag_model)
 
-print(is_result, elbo_result)
+print('Laplace result: ', laplace_result)
+print('Bartlett result: ', bartlett_result)
+print('ELBO result: ', elbo_result)
+print('IS result: ', is_result)
 
 if args.save_path is not None:
     torch.save({
@@ -149,9 +150,4 @@ if args.save_path is not None:
         'bartlett': bartlett_result.item(),
         'is': is_result.item(),
         'elbo': elbo_result.item()
-    }, f=args.save_path)
-    
-
-
-
-    
+    }, f=args.save_path)    
