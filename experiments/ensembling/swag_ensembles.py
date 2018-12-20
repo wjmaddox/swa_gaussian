@@ -1,13 +1,13 @@
 import argparse
-import torch
-import os
-import models, swag, data, utils
-import torch.nn.functional as F
 import numpy as np
-from itertools import chain, product
 import tabulate
-import itertools
-#from load_different_state_dict import load_different_state_dict, _load_from_different_state_dict
+import torch
+
+from itertools import chain, product
+import torch.nn.functional as F
+
+from swag import data, losses, models, utils
+from swag.posteriors import SWAG
 
 parser = argparse.ArgumentParser(description='SGD/SWA/SWAG ensembling')
 parser.add_argument('--replications', type=int, default=10, help='number of passes through testing set')
@@ -80,11 +80,6 @@ else:
         split_classes=None
     )
 
-    
-
-#torch.nn.Module.load_different_state_dict = load_different_state_dict
-#torch.nn.Module._load_from_different_state_dict = _load_from_different_state_dict
-
 swag_model_location = args.dir + '/swag-' + str(args.epoch) + '.pt'
 model_location = args.dir + '/checkpoint-' + str(args.epoch) + '.pt'
 print('Loading sgd model at ' + model_location + ' and swag_model at ' + swag_model_location)
@@ -98,9 +93,7 @@ model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwa
 model.cuda()
 
 print('SWAG training')
-
-swag_model = swag.SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models = args.num_models, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
-
+swag_model = SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models = args.num_models, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 swag_model.cuda()
 
 swag_model.load_state_dict(swag_checkpoint['state_dict'])
@@ -112,9 +105,8 @@ del model_checkpoint
 #will be trying four different methods 
 #sgd, swa, swag, swag + outerproduct (later)
 
-criterion = F.cross_entropy
+criterion = losses.cross_entropy
 
-#sgd_results, swa_results, swag_1sample_results, swag_3samples_results, swag_10samples_results = [],[],[],[], []
 columns = ['model', 'samples', 'cov', 'is', 'acc', 'acc_sd', 'te_loss', 'te_loss_sd']
 
 results = []
@@ -148,7 +140,7 @@ def run_ensembles(samples, cov, use_is, reps=args.replications):
 
     current_list = []
     for _ in range(reps):
-        current_list.append([sample, cov, use_is, method(loaders, swag_model, criterion, samples=samples, cov=cov,scale=1.0)])
+        current_list.append([sample, cov, use_is, method(loaders, swag_model, F.cross_entropy, samples=samples, cov=cov,scale=1.0)])
     return current_list
 
 samples_list = [1, 3, 10, 30]

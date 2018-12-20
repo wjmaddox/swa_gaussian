@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 
 from . import (
-    dropout,
-    empirical,
-    laplace,
     models,
-    swag,
+    posteriors,
     data,
     losses,
-    utils
+    utils, 
+    regression_data,
 )
 
 __all__ = [
@@ -17,9 +15,8 @@ __all__ = [
     "data",
     "losses",
     "models",
-    "dropout",
-    "empirical",
-    "swag"
+    "posteriors",
+    "regression_data"
     #classes
 
     #functions

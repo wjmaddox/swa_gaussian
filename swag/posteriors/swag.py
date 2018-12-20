@@ -8,7 +8,7 @@ import gpytorch
 from gpytorch.lazy import RootLazyTensor, DiagLazyTensor, AddedDiagLazyTensor
 from gpytorch.distributions import MultivariateNormal
 
-from utils import flatten
+from ..utils import flatten
 
 def unflatten_like(vector, likeTensorList):
     # Takes a flat torch.tensor and unflattens it to a list of torch.tensors

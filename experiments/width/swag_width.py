@@ -1,8 +1,10 @@
 import argparse
 import torch
-import models, swag, data, utils
 import torch.nn.functional as F
 import numpy as np
+
+from swag import data, models, utils
+from swag.posteriors import SWAG
 
 parser = argparse.ArgumentParser(description='SGD/SWA training')
 parser.add_argument('--file', type=str, default=None, required=True, help='checkpoint')
@@ -48,7 +50,7 @@ loaders, num_classes = data.loaders(
 
 
 print('Preparing SWAG model')
-swag_model = swag.SWAG(model_cfg.base, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+swag_model = SWAG(model_cfg.base, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 swag_model.cuda()
 
 print('Loading model %s' % args.file)
@@ -60,8 +62,6 @@ w = mean.copy()
 
 ord = np.argsort(var)
 
-
-
 criterion = F.cross_entropy
 
 te_acc = np.zeros((args.N, 2))
@@ -72,7 +72,6 @@ ind = ord[list(range(0, ord.size - ord.size % K, K)) + [ord.size - 1]]
 
 w_mean = mean[ind]
 w_std = np.sqrt(var[ind])
-
 
 for i, w_id in enumerate(ind):
     print('%d/%d. Mean: %f Std: %f' % (i + 1, args.N, w_mean[i], w_std[i]))

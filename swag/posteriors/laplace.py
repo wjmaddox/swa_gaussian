@@ -2,7 +2,8 @@ import torch
 import numpy as np
 import torch.distributions
 import time
-import utils
+
+from ..utils import eval
 
 def laplace_parameters(module, params, no_cov_mat=True, max_num_models=0):
     for name in list(module._parameters.keys()):
@@ -123,7 +124,7 @@ class Laplace(torch.nn.Module):
             current_scale = torch.exp(logscale)
             self.sample(scale=current_scale)
 
-            result = utils.eval(loader, self, criterion)
+            result = eval(loader, self, criterion)
 
             all_losses[i] = result['loss']
         

@@ -1,5 +1,9 @@
+import os
 import torch
+import tqdm
 from datetime import datetime
+import torch.nn.functional as F
+
 from ..utils import bn_update, LogSumExp
 
 def eval_dropout(loaders, model, criterion, samples = 10):
@@ -8,7 +12,6 @@ def eval_dropout(loaders, model, criterion, samples = 10):
     criterion: loss function
     samples: number of samples to draw from dropout approximation"""
 
-    loss_sum = 0.0
     correct = 0.0
     model.eval()
 
@@ -63,12 +66,12 @@ def eval_dropout(loaders, model, criterion, samples = 10):
         'accuracy': (correct / len(loaders['test'].dataset)) * 100.0,
     } 
 
-def find_models(dir):
+def find_models(dir, start_epoch):
     #this is to generate the list of models we'll be searching for
 
     all_models = os.popen('ls ' + dir + '/checkpoint*.pt').read().split('\n')
     model_epochs = [int(t.replace('.', '-').split('-')[1]) for t in all_models[:-1]]
-    models_to_use = [t >= args.epoch for t in model_epochs]
+    models_to_use = [t >= start_epoch for t in model_epochs]
 
     model_names = list()
     for model_name, use in zip(all_models, models_to_use):

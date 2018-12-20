@@ -1,8 +1,11 @@
 import argparse
 import torch
-import models, swag, data, utils
 import torch.nn.functional as F
 import numpy as np
+import tqdm
+
+from swag import data, utils, models
+#from swag.posteriors import Laplace, SWAG
 
 parser = argparse.ArgumentParser(description='SGD/SWA training')
 parser.add_argument('--file', type=str, default=None, required=True, help='checkpoint')
@@ -12,21 +15,19 @@ parser.add_argument('--data_path', type=str, default='/scratch/datasets/', metav
                     help='path to datasets location (default: None)')
 parser.add_argument('--use_test', dest='use_test', action='store_true', help='use test dataset instead of validation (default: False)')
 parser.add_argument('--batch_size', type=int, default=128, metavar='N', help='input batch size (default: 128)')
+parser.add_argument('--split_classes', type=int, default=None)
 parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
 parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
                     help='model name (default: VGG16)')
-
-
-parser.add_argument('--N', type=int, default=700, metavar='N', help='number of weights to try')
-parser.add_argument('--delta', type=float, default=0.03, metavar='DELTA', help='weights delta (default: 0.03)')
 parser.add_argument('--save_path', type=str, default=None, required=True, help='path to npz results file')
-
+parser.add_argument('--N', type=int, default=20)
+parser.add_argument('--scale', type=float, default=1.0)
 
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 
-
-
 args = parser.parse_args()
+
+eps = 1e-12
 
 torch.backends.cudnn.benchmark = True
 torch.manual_seed(args.seed)
@@ -43,60 +44,44 @@ loaders, num_classes = data.loaders(
     args.num_workers,
     model_cfg.transform_train,
     model_cfg.transform_test,
-    use_validation=not args.use_test
+    use_validation=not args.use_test,
+    split_classes=args.split_classes,
+    shuffle_train=False
 )
 
-
-print('Preparing SWAG model')
-swag_model = swag.SWAG(model_cfg.base, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
-swag_model.cuda()
+print('Preparing model')
+model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+model.cuda()
 
 print('Loading model %s' % args.file)
 checkpoint = torch.load(args.file)
-swag_model.load_state_dict(checkpoint['state_dict'])
+model.load_state_dict(checkpoint['state_dict'])
 
-mean, var = swag_model.export_numpy_params()
-w = mean.copy()
+predictions = np.zeros((len(loaders['test'].dataset), num_classes))
+targets = np.zeros(len(loaders['test'].dataset))
+print(targets.size)
+with torch.no_grad():
+    for i in range(args.N):
+        print('%d/%d' % (i + 1, args.N))
 
-ord = np.argsort(var)
+        model.eval()
 
+        #function that sets dropout to train mode
+        def train_dropout(m):
+            if type(m)==torch.nn.modules.dropout.Dropout:
+                m.train()
+        model.apply(train_dropout)
 
+        k = 0
+        for input, target in tqdm.tqdm(loaders['test']):
+            input = input.cuda(non_blocking=True)
+            output = model(input)
 
-criterion = F.cross_entropy
+            predictions[k:k+input.size()[0]] += F.softmax(output, dim=1).cpu().numpy()
+            targets[k:(k+target.size(0))] = target.numpy()
+            k += input.size()[0]
+            
+    predictions /= args.N
 
-te_acc = np.zeros((args.N, 2))
-te_nll = np.zeros((args.N, 2))
-
-K = ord.size // (args.N - 1)
-ind = ord[list(range(0, ord.size - ord.size % K, K)) + [ord.size - 1]]
-
-w_mean = mean[ind]
-w_std = np.sqrt(var[ind])
-
-
-for i, w_id in enumerate(ind):
-    print('%d/%d. Mean: %f Std: %f' % (i + 1, args.N, w_mean[i], w_std[i]))
-    val = w[w_id]
-
-    w[w_id] = val - args.delta
-    swag_model.import_numpy_weights(w)
-    res = utils.eval(loaders['test'], swag_model, criterion)
-    te_acc[i, 0], te_nll[i, 0] = res['accuracy'], res['loss']
-    print('w = %f: acc = %.4f nll = %.4f' % (w[w_id], te_acc[i, 0], te_nll[i, 0]))
-
-    w[w_id] = val + args.delta
-    swag_model.import_numpy_weights(w)
-    res = utils.eval(loaders['test'], swag_model, criterion)
-    te_acc[i, 1], te_nll[i, 1] = res['accuracy'], res['loss']
-    print('w = %f: acc = %.4f nll = %.4f' % (w[w_id], te_acc[i, 1], te_nll[i, 1]))
-    print()
-    w[w_id] = val
-
-np.savez(
-    args.save_path,
-    w_mean=w_mean,
-    w_std=w_std,
-    te_acc=te_acc,
-    te_nll=te_nll,
-    delta=args.delta
-)
+entropies = -np.sum(np.log(predictions + eps) * predictions, axis=1)
+np.savez(args.save_path, entropies=entropies, predictions=predictions, targets=targets)

@@ -37,8 +37,7 @@ def train_epoch(loader, model, criterion, optimizer):
         input = input.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
 
-        output = model(input)
-        loss, output = criterion(output, target)
+        loss, output = criterion(model, input, target)
         
         optimizer.zero_grad()
         loss.backward()
