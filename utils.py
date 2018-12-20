@@ -64,20 +64,20 @@ def eval(loader, model, criterion):
 
     model.eval()
 
-    for i, (input, target) in enumerate(loader):
-        input = input.cuda(non_blocking=True)
-        target = target.cuda(non_blocking=True)
+    with torch.no_grad():
+        for i, (input, target) in enumerate(loader):
+            input = input.cuda(non_blocking=True)
+            target = target.cuda(non_blocking=True)
 
-        output = model(input)
-        loss = criterion(output, target)
+            loss, output = criterion(model, input, target)
 
-        loss_sum += loss.item() * input.size(0)
+            loss_sum += loss.item() * input.size(0)
 
-        #if criterion.__name__ == 'cross_entropy':
-        pred = output.data.argmax(1, keepdim=True)
-        correct += pred.eq(target.data.view_as(pred)).sum().item()
-        #if criterion.__name__ == 'mse_loss':
-        #    correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
+            #if criterion.__name__ == 'cross_entropy':
+            pred = output.data.argmax(1, keepdim=True)
+            correct += pred.eq(target.data.view_as(pred)).sum().item()
+            #if criterion.__name__ == 'mse_loss':
+            #    correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
 
     return {
         'loss': loss_sum / len(loader.dataset),
