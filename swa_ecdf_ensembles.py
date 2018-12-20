@@ -1,7 +1,7 @@
 import argparse
 import torch
 import os
-import models, swag, data, utils
+import models, swag, data, utils, losses
 import torch.nn.functional as F
 import numpy as np
 from itertools import chain, product
@@ -68,9 +68,11 @@ else:
 print('Preparing model')
 model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 model.cuda()
+model.eval()
 
 print('using cross-entropy loss')
-criterion = F.cross_entropy
+#criterion = F.cross_entropy
+criterion = losses.cross_entropy
 
 #this is to generate the list of models we'll be searching for
 def find_models(dir):
@@ -89,41 +91,43 @@ def empirical_dist_ensembling(loader, model, locs):
     loss_sum = 0.0
     correct = 0.0
 
-    for (input, target) in tqdm.tqdm(loader):
+    with torch.no_grad():
+        for (input, target) in tqdm.tqdm(loader):
 
-        input = input.cuda(async=True)
-        target = target.cuda(async=True)
+            input = input.cuda(async=True)
+            target = target.cuda(async=True)
 
-        full_output_prob = 0.0
-        for loc in locs:
-            #randomly sample from N(swa, swa_var) with seed i
-            #swa_model.sample(scale=scale, cov=cov, seed=i+seed_base)
-            model.load_state_dict(torch.load(loc)['state_dict'])
+            full_output_prob = 0.0
+            for loc in locs:
+                #randomly sample from N(swa, swa_var) with seed i
+                #swa_model.sample(scale=scale, cov=cov, seed=i+seed_base)
+                model.load_state_dict(torch.load(loc)['state_dict'])
 
-            output = model(input)
-            #print('indiv model loss:', criterion(output,target).data.item())
-            if criterion.__name__ == 'cross_entropy':
-                full_output_prob += torch.nn.Softmax(dim=1)(output) #avg of probabilities
-            else:
-                full_output_prob += output #avg for mse?
-        
-        full_output_prob /= len(locs)
+                output = model(input)
+                full_output_prob += torch.nn.Softmax(dim=1)(output)
+                #print('indiv model loss:', criterion(output,target).data.item())
+                #if criterion.__name__ == 'cross_entropy':
+                #    full_output_prob += torch.nn.Softmax(dim=1)(output) #avg of probabilities
+                #else:
+                #    full_output_prob += output #avg for mse?
+            
+            full_output_prob /= len(locs)
 
-        full_output_logit = full_output_prob.log()
-        loss = criterion(full_output_logit, target)
+            full_output_logit = full_output_prob.log()
+            loss = F.cross_entropy(full_output_logit, target)
 
-        loss_sum += loss.data.item() * input.size(0)
+            loss_sum += loss.data.item() * input.size(0)
 
-        if criterion.__name__ == 'cross_entropy':
+            #if criterion.__name__ == 'cross_entropy':
             pred = full_output_logit.data.argmax(1, keepdim=True)
             correct += pred.eq(target.data.view_as(pred)).sum().item()
-        else:
-            correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
+            #else:
+            #    correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
 
-    return {
-        'loss': loss_sum / len(loader.dataset),
-        'accuracy': correct / len(loader.dataset) * 100.0
-    }
+        return {
+            'loss': loss_sum / len(loader.dataset),
+            'accuracy': correct / len(loader.dataset) * 100.0
+        }
 
 ##compute point estimates for last sgd predictions
 if True:
@@ -152,16 +156,20 @@ if not args.no_ensembles:
     for dir in args.dir:
         #print('now running ' + dir)
         dir_locs = find_models(dir)
-        res = empirical_dist_ensembling(loaders['test'], model, dir_locs)
+
+    full_value_list = []
+    for i in range(len(dir_locs)):
+        res = empirical_dist_ensembling(loaders['test'], model, dir_locs[0:(i+1)])
         ensemble_loss.append(res['loss'])
         ensemble_accuracy.append(res['accuracy'])
 
-    columns = ['model', 'starting_epoch', 'acc', 'acc_var', 'loss', 'loss_var']
-    values = [args.model, args.epoch, np.mean(ensemble_accuracy), np.var(ensemble_accuracy), np.mean(ensemble_loss), np.var(ensemble_loss)]
-    table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
-    print(table)
+        columns = ['model', 'epoch', 'acc', 'acc_var', 'loss', 'loss_var']
+        values = [args.model, args.epoch+i, np.mean(ensemble_accuracy), np.var(ensemble_accuracy), np.mean(ensemble_loss), np.var(ensemble_loss)]
+        table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
+        print(table)
+        full_value_list.append(values)
 
-    np.savez(args.save_path, result=values)
+    np.savez(args.save_path, result=full_value_list)
 
 if not args.no_swa:
     for dir in args.dir:
