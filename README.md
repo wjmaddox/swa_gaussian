@@ -1,13 +1,13 @@
-# CLONE OF TIMUR GARIPOV'S SWA REPO ON 6/7/18
+# A Simple and Effective Baseline for Bayesian DNNs
 
-goal of this repo is to expand swa with variances, as well as attempt ensembling
+This is a clone of https://github.com/timgaripov/swa from 6/7/18.
 
-run_swag: timur's code for training with both first and second moments using swa
+The goal of this repo is to expand swa with variances, as well as attempt ensembling
 
-swag: set-up for swag
-
-swag_model_loading: evaluates a pre-trained swag by comparing to swa, 1 sample from the gaussian and the average prediction from 100 gaussians
-  - currently looks like ensembling using the gaussian is effective
+Installation:
+```bash
+python setup.py develop
+```
 
 comparisons on cifar10 will be against
   - dropout
