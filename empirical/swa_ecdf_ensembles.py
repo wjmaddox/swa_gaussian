@@ -1,6 +1,7 @@
 import argparse
 import torch
 import os
+os.sys.path.append("/home/izmailovpavel/Documents/Projects/private_swa_uncertainties")
 import models, swag, data, utils, losses
 import torch.nn.functional as F
 import numpy as np

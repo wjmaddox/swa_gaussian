@@ -3,6 +3,8 @@ import os
 import copy
 from datetime import datetime
 import math
+import torch.nn.functional as F
+import numpy as np
 
 def flatten(lst):
     tmp = [i.contiguous().view(-1,1) for i in lst]
@@ -37,8 +39,8 @@ def train_epoch(loader, model, criterion, optimizer):
         input = input.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
 
-        output = model(input)
-        loss, output = criterion(output, target)
+        #output = model(input)
+        loss, output = criterion(model, input, target)
         
         optimizer.zero_grad()
         loss.backward()
@@ -287,3 +289,15 @@ def fast_importance_sampling(loaders, swa_model, criterion, samples = 10, cov=Tr
         'loss': loss_sum / len(loaders['test'].dataset),
         'accuracy': correct / len(loaders['test'].dataset) * 100.0
     }
+
+def predictions(test_loader, model, **kwargs):
+    model.eval()
+    preds = []
+    targets = []
+    for input, target in test_loader:
+        input = input.cuda(async=True)
+        output = model(input, **kwargs)
+        probs = F.softmax(output, dim=1)
+        preds.append(probs.cpu().data.numpy())
+        targets.append(target.numpy())
+    return np.vstack(preds), np.concatenate(targets)
