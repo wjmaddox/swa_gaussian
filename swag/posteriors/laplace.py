@@ -1,140 +1,235 @@
 import torch
-import numpy as np
-import torch.distributions
-import time
 
-from ..utils import eval
+class KFACLaplace(torch.nn.Module):
+    r"""KFAC Laplace: based on Scalable Laplace
+    Code is partially copied from https://github.com/wjmaddox/fisher_ngd/blob/master/EKFAC/kfac.py.
+    """
+    def __init__(self, net, eps, sua=False, pi=False, update_freq=1,
+                 alpha=1.0, constraint_norm=False):
+        """ K-FAC Preconditionner for Linear and Conv2d layers.
+        Computes the K-FAC of the second moment of the gradients.
+        It works for Linear and Conv2d layers and silently skip other layers.
+        Args:
+            net (torch.nn.Module): Network to precondition.
+            eps (float): Tikhonov regularization parameter for the inverses.
+            sua (bool): Applies SUA approximation.
+            pi (bool): Computes pi correction for Tikhonov regularization.
+            update_freq (int): Perform inverses every update_freq updates.
+            alpha (float): Running average parameter (if == 1, no r. ave.).
+            constraint_norm (bool): Scale the gradients by the squared
+                fisher norm.
+        """
+        self.state = net.state_dict()
+        self.eps = eps
+        self.sua = sua
+        self.pi = pi
+        self.update_freq = update_freq
+        self.alpha = alpha
+        self.constraint_norm = constraint_norm
+        self.params = []
+        self._iteration_counter = 0
+        for mod in net.modules():
+            mod_class = mod.__class__.__name__
+            if mod_class in ['Linear', 'Conv2d']:
+                mod.register_forward_pre_hook(self._save_input)
+                mod.register_backward_hook(self._save_grad_output)
+                params = [mod.weight]
+                if mod.bias is not None:
+                    params.append(mod.bias)
+                d = {'params': params, 'mod': mod, 'layer_type': mod_class}
+                self.params.append(d)
 
-def laplace_parameters(module, params, no_cov_mat=True, max_num_models=0):
-    for name in list(module._parameters.keys()):
-        if module._parameters[name] is None:
-            print(module, name)
-            continue
-        data = module._parameters[name].data
-        module._parameters.pop(name)
-        module.register_buffer('%s_mean' % name, data.new(data.size()).zero_())
-        module.register_buffer('%s_var' % name, data.new(data.size()).zero_())
-        module.register_buffer(name, data.new(data.size()).zero_())
-
-        if no_cov_mat is False:
-            if int(torch.__version__.split('.')[1]) >= 4:
-                module.register_buffer('%s_cov_mat_sqrt' % name, torch.zeros(max_num_models,data.numel()).cuda())
-            else:
-                module.register_buffer('%s_cov_mat_sqrt' % name, torch.autograd.Variable(torch.zeros(max_num_models,data.numel()).cuda()))
-
-        params.append((module, name))
-
-
-class Laplace(torch.nn.Module):
-    def __init__(self, base, max_num_models=20, no_cov_mat=False, *args, **kwargs):
-        super(Laplace, self).__init__()        
-        self.params = list()
-
-        self.base = base(*args, **kwargs)
-        self.max_num_models = max_num_models
-
-        self.base.apply(lambda module: laplace_parameters(module=module, params=self.params, no_cov_mat=no_cov_mat, max_num_models=max_num_models))
-
-    def forward(self, input):
-        return self.base(input)
-
-    def sample(self, scale=1.0, cov=False, require_grad=False):
-        for module, name in self.params:
-            mean = module.__getattr__('%s_mean' % name)
-            var = module.__getattr__('%s_var' % name)
-
-            if not cov:
-                eps = mean.new(mean.size()).normal_()
-                w = mean + scale * torch.sqrt(var) * eps
-            else:
-                cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
-                eps = torch.zeros(cov_mat_sqrt.size(0), 1).normal_().cuda() #rank-deficient normal results
-                #sqrt(max_num_models) scaling comes from covariance matrix
-                w = mean + (scale/((self.max_num_models - 1) ** 0.5)) * var * cov_mat_sqrt.t().matmul(eps).view_as(mean)
-
-            if require_grad:
-                w.requires_grad_()
-            module.__setattr__(name, w)
-            getattr(module, name)
-        else:
-            for module, name in self.params:
-                mean = module.__getattr__('%s_mean' % name)
-                var = module.__getattr__('%s_var' % name)
-
-
-    def export_numpy_params(self):
-        mean_list = []
-        var_list = []
-        for module, name in self.params:
-            mean_list.append(module.__getattr__('%s_mean' % name).cpu().numpy().ravel())
-            var_list.append(module.__getattr__('%s_var' % name).cpu().numpy().ravel())
-        mean = np.concatenate(mean_list)
-        var = np.concatenate(var_list)
-        return mean, var
-
-    def import_numpy_mean(self, w):
-        k = 0
-        for module, name in self.params:
-            mean = module.__getattr__('%s_mean' % name)
-            s = np.prod(mean.shape)
-            mean.copy_(mean.new_tensor(w[k:k + s].reshape(mean.shape)))
-            k += s
-
-    def import_numpy_cov_mat_sqrt(self, w):
-        k = 0
-        for (module, name), sq in zip(self.params, w):
-            cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
-            cov_mat_sqrt.copy_(cov_mat_sqrt.new_tensor(sq.reshape(cov_mat_sqrt.shape)))
-
-    def estimate_variance(self, loader, criterion, samples=1, tau=5e-4):
-        fisher_diag = dict()
-        for module, name in self.params:
-            var = module.__getattr__('%s_var' % name)
-            fisher_diag[(module, name)] = var.new(var.size()).zero_()
-        self.sample(scale=0.0, require_grad=True)
-        for s in range(samples):
-            t_s = time.time()
-            for input, target in loader:
-                input = input.cuda(non_blocking=True)
-                target = target.cuda(non_blocking=True)
-
-                output = self(input)
-                distribution = torch.distributions.Categorical(logits=output)
-                y = distribution.sample()
-                loss = criterion(output, y)
-
-                loss.backward()
-
-                for module, name in self.params:
-                    grad = module.__getattr__(name).grad
-                    fisher_diag[(module, name)].add_(torch.pow(grad, 2))
-            t = time.time() - t_s
-            print('%d/%d %.2f sec' % (s + 1, samples, t))
-
-        for module, name in self.params:
-            f = fisher_diag[(module, name)] / samples
-            var = 1.0 / (f  + tau)
-            module.__getattr__('%s_var' % name).copy_(var)
-
-    def scale_grid_search(self, loader, criterion, logscale_range = torch.arange(-10, 0, 0.5).cuda()):
-        all_losses = torch.zeros_like(logscale_range)
-        t_s = time.time()
-        for i, logscale in enumerate(logscale_range):
-            print('forwards pass with ', logscale)
-            current_scale = torch.exp(logscale)
-            self.sample(scale=current_scale)
-
-            result = eval(loader, self, criterion)
-
-            all_losses[i] = result['loss']
+        #super(KFACLaplace, self).__init__(self.params, {})
         
-        min_index = torch.min(all_losses,dim=0)[1]
-        scale = torch.exp(logscale_range[min_index]).item()
-        t_s_final = time.time() - t_s
-        print('estimating scale took %.2f sec'%(t_s_final))
-        return scale
 
+        super(KFACLaplace, self).__init__()
 
+    def sample(self, scale, **kwargs):
+        for group in self.params:
+            # Getting parameters
+            if len(group['params']) == 2:
+                weight, bias = group['params']
+            else:
+                weight = group['params'][0]
+                bias = None
+            state = self.state[weight]
 
+            # now compute inverse covariances
+            self._compute_covs(group, state)
+            ixxt, iggt = self._inv_covs(state['xxt'], state['ggt'],
+                                        state['num_locations'])
+            state['ixxt'] = ixxt
+            state['iggt'] = iggt
+            
+            # compute cholesky decompositions
+            ixxt_chol = torch.cholesky(ixxt)
+            iggt_chol = torch.cholesky(iggt)
 
+            # draw samples from AZB
+            # appendix B of ritter et al.
+            z = torch.randn(state['ixxt'].size(0), state['iggt'].size(0), device = ixxt.device, dtype = ixxt.dtype)
+            # matmul a z b
+            sample = ixxt_chol.matmul(z.matmul(iggt_chol))
+            print(sample.size())
 
+            #now add mean
+
+            #finally update parameters with new values
+
+    """def step(self, update_stats=True, update_params=True):
+        #Performs one step of preconditioning.
+        fisher_norm = 0.
+        for group in self.param_groups:
+            # Getting parameters
+            if len(group['params']) == 2:
+                weight, bias = group['params']
+            else:
+                weight = group['params'][0]
+                bias = None
+            state = self.state[weight]
+            # Update convariances and inverses
+            if update_stats:
+                if self._iteration_counter % self.update_freq == 0:
+                    self._compute_covs(group, state)
+                    ixxt, iggt = self._inv_covs(state['xxt'], state['ggt'],
+                                                state['num_locations'])
+                    state['ixxt'] = ixxt
+                    state['iggt'] = iggt
+                else:
+                    if self.alpha != 1:
+                        self._compute_covs(group, state)
+            if update_params:
+                # Preconditionning
+                gw, gb = self._precond(weight, bias, group, state)
+                # Updating gradients
+                if self.constraint_norm:
+                    fisher_norm += (weight.grad * gw).sum()
+                weight.grad.data = gw
+                if bias is not None:
+                    if self.constraint_norm:
+                        fisher_norm += (bias.grad * gb).sum()
+                    bias.grad.data = gb
+            # Cleaning
+            if 'x' in self.state[group['mod']]:
+                del self.state[group['mod']]['x']
+            if 'gy' in self.state[group['mod']]:
+                del self.state[group['mod']]['gy']
+        # Eventually scale the norm of the gradients
+        if update_params and self.constraint_norm:
+            scale = (1. / fisher_norm) ** 0.5
+            for group in self.param_groups:
+                for param in group['params']:
+                    param.grad.data *= scale
+        if update_stats:
+            self._iteration_counter += 1"""
+
+    def _save_input(self, mod, i):
+        """Saves input of layer to compute covariance."""
+        if mod.training:
+            self.state[mod]['x'] = i[0]
+
+    def _save_grad_output(self, mod, grad_input, grad_output):
+        """Saves grad on output of layer to compute covariance."""
+        if mod.training:
+            self.state[mod]['gy'] = grad_output[0] * grad_output[0].size(0)
+
+    def _precond(self, weight, bias, group, state):
+        """Applies preconditioning."""
+        if group['layer_type'] == 'Conv2d' and self.sua:
+            return self._precond_sua(weight, bias, group, state)
+        ixxt = state['ixxt']
+        iggt = state['iggt']
+        g = weight.grad.data
+        s = g.shape
+        if group['layer_type'] == 'Conv2d':
+            g = g.contiguous().view(s[0], s[1]*s[2]*s[3])
+        if bias is not None:
+            gb = bias.grad.data
+            g = torch.cat([g, gb.view(gb.shape[0], 1)], dim=1)
+        g = torch.mm(torch.mm(iggt, g), ixxt)
+        if group['layer_type'] == 'Conv2d':
+            g /= state['num_locations']
+        if bias is not None:
+            gb = g[:, -1].contiguous().view(*bias.shape)
+            g = g[:, :-1]
+        else:
+            gb = None
+        g = g.contiguous().view(*s)
+        return g, gb
+
+    def _precond_sua(self, weight, bias, group, state):
+        """Preconditioning for KFAC SUA."""
+        ixxt = state['ixxt']
+        iggt = state['iggt']
+        g = weight.grad.data
+        s = g.shape
+        mod = group['mod']
+        g = g.permute(1, 0, 2, 3).contiguous()
+        if bias is not None:
+            gb = bias.grad.view(1, -1, 1, 1).expand(1, -1, s[2], s[3])
+            g = torch.cat([g, gb], dim=0)
+        g = torch.mm(ixxt, g.contiguous().view(-1, s[0]*s[2]*s[3]))
+        g = g.view(-1, s[0], s[2], s[3]).permute(1, 0, 2, 3).contiguous()
+        g = torch.mm(iggt, g.view(s[0], -1)).view(s[0], -1, s[2], s[3])
+        g /= state['num_locations']
+        if bias is not None:
+            gb = g[:, -1, s[2]//2, s[3]//2]
+            g = g[:, :-1]
+        else:
+            gb = None
+        return g, gb
+
+    def _compute_covs(self, group, state):
+        """Computes the covariances."""
+        mod = group['mod']
+        x = self.state[group['mod']]['x']
+        gy = self.state[group['mod']]['gy']
+        # Computation of xxt
+        if group['layer_type'] == 'Conv2d':
+            if not self.sua:
+                x = F.unfold(x, mod.kernel_size, padding=mod.padding,
+                             stride=mod.stride)
+            else:
+                x = x.view(x.shape[0], x.shape[1], -1)
+            x = x.data.permute(1, 0, 2).contiguous().view(x.shape[1], -1)
+        else:
+            x = x.data.t()
+        if mod.bias is not None:
+            ones = torch.ones_like(x[:1])
+            x = torch.cat([x, ones], dim=0)
+        if self._iteration_counter == 0:
+            state['xxt'] = torch.mm(x, x.t()) / float(x.shape[1])
+        else:
+            state['xxt'].addmm_(mat1=x, mat2=x.t(),
+                                beta=(1. - self.alpha),
+                                alpha=self.alpha / float(x.shape[1]))
+        # Computation of ggt
+        if group['layer_type'] == 'Conv2d':
+            gy = gy.data.permute(1, 0, 2, 3)
+            state['num_locations'] = gy.shape[2] * gy.shape[3]
+            gy = gy.contiguous().view(gy.shape[0], -1)
+        else:
+            gy = gy.data.t()
+            state['num_locations'] = 1
+        if self._iteration_counter == 0:
+            state['ggt'] = torch.mm(gy, gy.t()) / float(gy.shape[1])
+        else:
+            state['ggt'].addmm_(mat1=gy, mat2=gy.t(),
+                                beta=(1. - self.alpha),
+                                alpha=self.alpha / float(gy.shape[1]))
+
+    def _inv_covs(self, xxt, ggt, num_locations):
+        """Inverses the covariances."""
+        # Computes pi
+        pi = 1.0
+        if self.pi:
+            tx = torch.trace(xxt) * ggt.shape[0]
+            tg = torch.trace(ggt) * xxt.shape[0]
+            pi = (tx / tg)
+        # Regularizes and inverse
+        eps = self.eps / num_locations
+        diag_xxt = xxt.new(xxt.shape[0]).fill_((eps * pi) ** 0.5)
+        diag_ggt = ggt.new(ggt.shape[0]).fill_((eps / pi) ** 0.5)
+        ixxt = (xxt + torch.diag(diag_xxt)).inverse()
+        iggt = (ggt + torch.diag(diag_ggt)).inverse()
+        return ixxt, iggt
