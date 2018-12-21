@@ -6,6 +6,7 @@ class KFACLaplace(torch.optim.Optimizer):
     r"""KFAC Laplace: based on Scalable Laplace
     Code is partially copied from https://github.com/Thrandis/EKFAC-pytorch/kfac.py.
     TODO: batch norm implementation
+    TODO: use some sort of validation set for scaling data_size parameter
     """
     def __init__(self, net, eps, sua=False, pi=False, update_freq=1,
                  alpha=1.0, constraint_norm=False, data_size = 50000):
@@ -48,6 +49,15 @@ class KFACLaplace(torch.optim.Optimizer):
 
         super(KFACLaplace, self).__init__(self.params, {})
         #super(KFACLaplace, self).__init__()
+
+    def eval(self):
+        self.net.eval()
+
+    def train(self):
+        self.net.train()
+
+    def apply(self, *args, **kwargs):
+        self.net.apply(*args, **kwargs)
 
     def sample(self, scale=1.0, **kwargs):
 
