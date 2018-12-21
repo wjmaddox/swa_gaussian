@@ -3,6 +3,7 @@ import torch
 import tqdm
 from datetime import datetime
 import torch.nn.functional as F
+import numpy as np
 
 from ..utils import bn_update, LogSumExp
 
@@ -121,3 +122,57 @@ def eval_ecdf(loader, model, locs):
             'loss': loss_sum / len(loader.dataset),
             'accuracy': correct / len(loader.dataset) * 100.0
         }
+
+def eval_laplace(loaders, laplace_model, criterion, samples = 10, **kwargs):
+    t_input, t_target = next(iter(loaders['train']))
+    t_input, t_target = t_input.cuda(non_blocking = True), t_target.cuda(non_blocking = True)
+
+    for i in range(samples):
+        #reload original state dict
+        laplace_model.net.load_state_dict(laplace_model.mean_state)
+
+        #set up the sampling procedure first
+        #requires one backwards call to get gradients
+        laplace_model.net.train()
+
+        loss, _ = criterion(laplace_model.net, t_input, t_target)
+        loss.backward()
+        laplace_model.step(update_params = False)
+
+        #now resample
+        laplace_model.sample()
+        bn_update(loaders['train'], laplace_model.net)
+
+        #eval mode for testing
+        laplace_model.net.eval()
+
+        with torch.no_grad():
+            preds = []
+            targets = []
+            for input, target in loaders['test']:
+                input = input.cuda(non_blocking=True)
+                output = laplace_model.net(input)
+                probs = F.softmax(output, dim=1)
+                #print(probs)
+                preds.append(probs)
+                targets.append(target)
+            predictions, targets = torch.cat(preds), torch.cat(targets)
+
+            if i == 0:
+                predictions_sum = predictions
+            else:
+                predictions_sum += predictions
+            
+            acc = 100.0 * np.mean(np.argmax(predictions.cpu().numpy(), axis=1) == targets.cpu().numpy())
+            ens_acc = 100.0 * np.mean(np.argmax(predictions_sum.cpu().numpy(), axis=1) == targets.cpu().numpy())
+
+            print('Model accuracy: %8.4f. Ensemble accuracy: %8.4f' % (acc, ens_acc))
+
+    #print(targets.size())
+    #ens_acc = 100.0 * torch.sum(torch.argmax(predictions_sum.cpu(), dim=1) == targets)/targets.size(0)
+    print(predictions_sum.size())
+    ens_loss = F.cross_entropy(predictions_sum.cpu(), targets)
+    return {
+        'loss': ens_loss,
+        'accuracy': ens_acc
+    }

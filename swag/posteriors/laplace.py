@@ -1,11 +1,14 @@
 import torch
+import torch.nn.functional as F
+import copy
 
-class KFACLaplace(torch.nn.Module):
+class KFACLaplace(torch.optim.Optimizer):
     r"""KFAC Laplace: based on Scalable Laplace
-    Code is partially copied from https://github.com/wjmaddox/fisher_ngd/blob/master/EKFAC/kfac.py.
+    Code is partially copied from https://github.com/Thrandis/EKFAC-pytorch/kfac.py.
+    TODO: batch norm implementation
     """
     def __init__(self, net, eps, sua=False, pi=False, update_freq=1,
-                 alpha=1.0, constraint_norm=False):
+                 alpha=1.0, constraint_norm=False, data_size = 50000):
         """ K-FAC Preconditionner for Linear and Conv2d layers.
         Computes the K-FAC of the second moment of the gradients.
         It works for Linear and Conv2d layers and silently skip other layers.
@@ -19,7 +22,11 @@ class KFACLaplace(torch.nn.Module):
             constraint_norm (bool): Scale the gradients by the squared
                 fisher norm.
         """
+        self.net = net
         self.state = net.state_dict()
+        self.mean_state = copy.deepcopy(self.state)
+        self.data_size = data_size
+
         self.eps = eps
         self.sua = sua
         self.pi = pi
@@ -39,12 +46,11 @@ class KFACLaplace(torch.nn.Module):
                 d = {'params': params, 'mod': mod, 'layer_type': mod_class}
                 self.params.append(d)
 
-        #super(KFACLaplace, self).__init__(self.params, {})
-        
+        super(KFACLaplace, self).__init__(self.params, {})
+        #super(KFACLaplace, self).__init__()
 
-        super(KFACLaplace, self).__init__()
+    def sample(self, scale=1.0, **kwargs):
 
-    def sample(self, scale, **kwargs):
         for group in self.params:
             # Getting parameters
             if len(group['params']) == 2:
@@ -55,7 +61,7 @@ class KFACLaplace(torch.nn.Module):
             state = self.state[weight]
 
             # now compute inverse covariances
-            self._compute_covs(group, state)
+            #self._compute_covs(group, state)
             ixxt, iggt = self._inv_covs(state['xxt'], state['ggt'],
                                         state['num_locations'])
             state['ixxt'] = ixxt
@@ -69,14 +75,23 @@ class KFACLaplace(torch.nn.Module):
             # appendix B of ritter et al.
             z = torch.randn(state['ixxt'].size(0), state['iggt'].size(0), device = ixxt.device, dtype = ixxt.dtype)
             # matmul a z b
-            sample = ixxt_chol.matmul(z.matmul(iggt_chol))
-            print(sample.size())
+            #print(state['ixxt'].shape, state['iggt'].shape)
+            sample = ixxt_chol.matmul(z.matmul(iggt_chol)).t()
+            sample /= self.data_size #1/N term for inverse
 
-            #now add mean
+            if bias is not None:
+                #print(weight.shape, bias.shape, sample.shape)
+                bias_sample = sample[:, -1].contiguous().view(*bias.shape)
+                sample = sample[:, :-1]
+                #print(weight.shape, bias.shape, sample.shape)
 
-            #finally update parameters with new values
+            #print(weight.norm(), sample.norm())
+            #finally update parameters with new values as mean is current state dict
+            weight.data.add_(sample.view_as(weight))
+            if bias is not None:
+                bias.data.add_(bias_sample.view_as(bias))
 
-    """def step(self, update_stats=True, update_params=True):
+    def step(self, update_stats=True, update_params=True):
         #Performs one step of preconditioning.
         fisher_norm = 0.
         for group in self.param_groups:
@@ -121,7 +136,7 @@ class KFACLaplace(torch.nn.Module):
                 for param in group['params']:
                     param.grad.data *= scale
         if update_stats:
-            self._iteration_counter += 1"""
+            self._iteration_counter += 1
 
     def _save_input(self, mod, i):
         """Saves input of layer to compute covariance."""

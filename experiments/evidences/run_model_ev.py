@@ -62,6 +62,11 @@ loaders, num_classes = data.loaders(
     split_classes=None
 )
 
+ds_length = len(loaders['train'].dataset)
+if args.use_test:
+    ds_length = len(loaders['test'].dataset)
+    
+print('ds_legnth: ', ds_length)
 swag_model_location = args.dir + '/swag-' + str(args.epoch) + '.pt'
 model_location = args.dir + '/checkpoint-' + str(args.epoch) + '.pt'
 print('Loading sgd model at ' + model_location + ' and swag_model at ' + swag_model_location)
@@ -136,10 +141,12 @@ is_result = evidences.log_marginal_is(log_prob_results_dict['log_ll'], log_prob_
 
 elbo_result = evidences.log_marginal_elbo(log_prob_results_dict['log_joint'], args.samples, numparams, log_determinant, swag_model)
 
-print('Laplace result: ', laplace_result)
-print('Bartlett result: ', bartlett_result)
-print('ELBO result: ', elbo_result)
-print('IS result: ', is_result)
+
+print('Size of dataset: ', ds_length)
+print('Laplace result: ', laplace_result.item()/ds_length)
+print('Bartlett result: ', bartlett_result.item()/ds_length)
+print('ELBO result: ', elbo_result.item()/ds_length)
+print('IS result: ', is_result.item()/ds_length)
 
 if args.save_path is not None:
     torch.save({
