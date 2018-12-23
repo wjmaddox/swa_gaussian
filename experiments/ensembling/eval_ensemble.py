@@ -6,7 +6,8 @@ import torch
 import torch.nn.functional as F
 
 from swag import data, models, utils
-from swag.posteriors.utils import eval_ecdf, eval_dropout
+from swag.posteriors.utils import eval_ecdf, eval_dropout, eval_laplace, eval_swag
+from swag.posteriors import SWAG
 
 parser = argparse.ArgumentParser(description='Ensemble evaluation')
 
@@ -71,3 +72,24 @@ if args.method == 'empirical':
     eval_ecdf(model, loaders, criterion, args.ckpt, num_classes)
 elif args.method == 'dropout':
     eval_dropout(model, loaders, criterion, args.ckpt[0], num_classes, args.samples)
+elif args.method == 'KFACLaplace':
+    eval_laplace(model, loaders, criterion, args.ckpt[0], num_classes, args.samples)
+else:
+    if args.method == 'SWAG-Diagonal':
+        use_cov_mat = False
+        full_rank = None
+    else:
+        use_cov_mat = True
+        
+        if args.method == 'SWAG-LR':
+            full_rank = False
+        else:
+            full_rank = True
+
+    swag_model = SWAG(architecture.base, no_cov_mat=False, max_num_models = 20, loading = True, *architecture.args,
+                    num_classes=num_classes, **architecture.kwargs)
+    swag_model.cuda()
+
+    eval_swag(swag_model, loaders, criterion, args.ckpt[0], num_classes, args.samples, use_cov_mat, full_rank)
+
+    
