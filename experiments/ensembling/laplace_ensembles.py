@@ -99,10 +99,11 @@ model.cuda()
 #laplace_model.load_state_dict(swag_checkpoint['state_dict'])
 
 model_checkpoint = torch.load(model_location)
-model.load_state_dict(model_checkpoint['state_dict'])
+model.load_state_dict(model_checkpoint['model_state'])
 
 print('Preparing Laplace model')
-weight_decay = model_checkpoint['optimizer']['param_groups'][0]['weight_decay']
+weight_decay = model_checkpoint['optimizer_state']['param_groups'][0]['weight_decay']
+#weight_decay = 1e-4
 laplace_model = KFACLaplace(model, eps = weight_decay, data_size = len(loaders['train'].dataset)) 
 del model_checkpoint
 
