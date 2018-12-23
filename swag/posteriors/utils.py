@@ -5,16 +5,24 @@ from datetime import datetime
 import torch.nn.functional as F
 import numpy as np
 
-from ..utils import bn_update, LogSumExp
+from ..utils import bn_update, LogSumExp, predictions
 
-def eval_dropout(loaders, model, criterion, samples = 10):
+def eval_dropout(model, loaders, criterion, path, num_classes, samples = 10, **kwargs):
     r"""loader: dataset loader
     model: stochastic weight averaging model
     criterion: loss function
     samples: number of samples to draw from dropout approximation"""
 
-    correct = 0.0
+    checkpoint = torch.load(path)
+    if 'model_state' in checkpoint.keys():
+        model.load_state_dict(checkpoint['model_state'])
+    else:
+        model.load_state_dict(checkpoint['state_dict'])
+
     model.eval()
+
+    #num_classes = max(loaders['train'].dataset.labels)
+    predictions_sum = np.zeros((len(loaders['test'].dataset), num_classes))
 
     #function that sets dropout to train mode
     def train_dropout(m):
@@ -25,107 +33,60 @@ def eval_dropout(loaders, model, criterion, samples = 10):
     #set seed by time + range(samples)
     #this is to ensure that we get different random numbers each time
     seed_base = int(datetime.now().timestamp())
-    target_list = []
     with torch.no_grad():
-        epoch_logprob_list = []
         for i in range(samples):
             torch.manual_seed(i + seed_base)
 
-            batch_prob_list = []
+            pred_probs, targets = predictions(loaders['test'], model)
+            acc = 100.0 * np.mean(np.argmax(pred_probs, axis=1) == targets)
 
-            for j, (input, target) in enumerate(loaders['test']):
-                #set seed so dropout should be deterministic by seed
-                torch.manual_seed(i + seed_base)
+            predictions_sum += pred_probs
+            ens_acc = 100.0 * np.mean(np.argmax(predictions_sum, axis=1) == targets)
 
-                input = input.cuda(non_blocking=True)
-                target = target.cuda(non_blocking=True)
-                if i==0:
-                    target_list.append(target)
+            #test loss
+            targets_tensor = torch.tensor(targets)
+            log_predictions_tensor = torch.tensor(pred_probs).log()
+            log_ens_predictions_tensor = torch.tensor(predictions_sum/(i+1)).log()
+            
+            loss = criterion(log_predictions_tensor, targets_tensor)
+            ens_loss = criterion(log_ens_predictions_tensor, targets_tensor)
 
-                #standard forwards pass but we don't reduce
-                output = model(input)
-                #loss = criterion(output, target, reduction='none')
-                prob = torch.nn.Softmax(dim=1)(output).unsqueeze(1)
-                batch_prob_list.append(prob)
-
-            #stack all results
-            batch_logprobs = torch.cat(batch_prob_list)
-            epoch_logprob_list.append(batch_logprobs)
-
-    epoch_prob = torch.cat(epoch_logprob_list, dim=1).permute(0, 2, 1)
-
-    epoch_logprobs = (epoch_prob.mean(dim=2)+1e-6).log()
-
-    target_stack = torch.cat(target_list)
-    pred = epoch_logprobs.data.argmax(1, keepdim=True)
-    correct = pred.eq(target_stack.data.view_as(pred)).sum().item()
-
-    loss = criterion(epoch_logprobs, target_stack)
+            print('Model accuracy: %8.4f. Ensemble accuracy: %8.4f' % (acc, ens_acc))
+            print('Model loss: %8.4f. Ensemble loss: %8.4f' % (loss, ens_loss))
 
     return {
-        'loss': loss.data.item(),
-        'accuracy': (correct / len(loaders['test'].dataset)) * 100.0,
-    } 
+        'loss': ens_loss,
+        'accuracy': ens_acc
+    }
 
-def find_models(dir, start_epoch):
+def find_models(dir, start_epoch = None):
     #this is to generate the list of models we'll be searching for
+    if type(dir) is str:
+        all_models = os.popen('ls ' + dir + '/checkpoint*.pt').read().split('\n')
+    else:
+        all_models = [os.popen('ls ' + d + '/checkpoint*.pt').read().split('\n') for d in dir]
 
-    all_models = os.popen('ls ' + dir + '/checkpoint*.pt').read().split('\n')
-    model_epochs = [int(t.replace('.', '-').split('-')[1]) for t in all_models[:-1]]
-    models_to_use = [t >= start_epoch for t in model_epochs]
+    #print('all_models: ',all_models[0][:-1])
+    if start_epoch is not None:
+        model_epochs = [int(t.replace('.', '-').split('-')[1]) for t in all_models[:-1]]
+        models_to_use = [t >= start_epoch for t in model_epochs]
 
-    model_names = list()
-    for model_name, use in zip(all_models, models_to_use):
-        if use is True:
-            model_names.append(model_name)
+        model_names = list()
+        for model_name, use in zip(all_models, models_to_use):
+            if use is True:
+                model_names.append(model_name)
 
-    return model_names
-
-def eval_ecdf(loader, model, locs):
-    loss_sum = 0.0
-    correct = 0.0
-
-    with torch.no_grad():
-        for (input, target) in tqdm.tqdm(loader):
-
-            input = input.cuda(async=True)
-            target = target.cuda(async=True)
-
-            full_output_prob = 0.0
-            for loc in locs:
-                #randomly sample from N(swa, swa_var) with seed i
-                #swa_model.sample(scale=scale, cov=cov, seed=i+seed_base)
-                model.load_state_dict(torch.load(loc)['state_dict'])
-
-                output = model(input)
-                full_output_prob += torch.nn.Softmax(dim=1)(output)
-                #print('indiv model loss:', criterion(output,target).data.item())
-                #if criterion.__name__ == 'cross_entropy':
-                #    full_output_prob += torch.nn.Softmax(dim=1)(output) #avg of probabilities
-                #else:
-                #    full_output_prob += output #avg for mse?
-            
-            full_output_prob /= len(locs)
-
-            full_output_logit = full_output_prob.log()
-            loss = F.cross_entropy(full_output_logit, target)
-
-            loss_sum += loss.data.item() * input.size(0)
-
-            #if criterion.__name__ == 'cross_entropy':
-            pred = full_output_logit.data.argmax(1, keepdim=True)
-            correct += pred.eq(target.data.view_as(pred)).sum().item()
-            #else:
-            #    correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
-
-        return {
-            'loss': loss_sum / len(loader.dataset),
-            'accuracy': correct / len(loader.dataset) * 100.0
-        }
+        return model_names
+    
+    else:
+        return all_models[0][:-1]
 
 def eval_laplace(loaders, laplace_model, criterion, samples = 10, **kwargs):
     t_input, t_target = next(iter(loaders['train']))
     t_input, t_target = t_input.cuda(non_blocking = True), t_target.cuda(non_blocking = True)
+    
+    num_classes = max(loaders['train'].dataset.labels)
+    predictions_sum = np.zeros((len(loaders['test'].dataset), num_classes))
 
     for i in range(samples):
         #reload original state dict
@@ -146,32 +107,57 @@ def eval_laplace(loaders, laplace_model, criterion, samples = 10, **kwargs):
         #eval mode for testing
         laplace_model.net.eval()
 
-        with torch.no_grad():
-            preds = []
-            targets = []
-            for input, target in loaders['test']:
-                input = input.cuda(non_blocking=True)
-                output = laplace_model.net(input)
-                probs = F.softmax(output, dim=1)
-                #print(probs)
-                preds.append(probs)
-                targets.append(target)
-            predictions, targets = torch.cat(preds), torch.cat(targets)
+        pred_probs, targets = utils.predictions(loaders['test'], model)
+        acc = 100.0 * np.mean(np.argmax(pred_probs, axis=1) == targets)
 
-            if i == 0:
-                predictions_sum = predictions
-            else:
-                predictions_sum += predictions
-            
-            acc = 100.0 * np.mean(np.argmax(predictions.cpu().numpy(), axis=1) == targets.cpu().numpy())
-            ens_acc = 100.0 * np.mean(np.argmax(predictions_sum.cpu().numpy(), axis=1) == targets.cpu().numpy())
+        predictions_sum += pred_probs
+        ens_acc = 100.0 * np.mean(np.argmax(predictions_sum, axis=1) == targets)
 
-            print('Model accuracy: %8.4f. Ensemble accuracy: %8.4f' % (acc, ens_acc))
+        #test loss
+        targets_tensor = torch.tensor(targets)
+        log_predictions_tensor = torch.tensor(pred_probs).log()
+        log_ens_predictions_tensor = torch.tensor(predictions_sum/(i+1)).log()
+        
+        loss = criterion(log_predictions_tensor, targets_tensor)
+        ens_loss = criterion(log_ens_predictions_tensor, targets_tensor)
 
-    #print(targets.size())
-    #ens_acc = 100.0 * torch.sum(torch.argmax(predictions_sum.cpu(), dim=1) == targets)/targets.size(0)
-    print(predictions_sum.size())
-    ens_loss = F.cross_entropy(predictions_sum.cpu(), targets)
+        print('Model accuracy: %8.4f. Ensemble accuracy: %8.4f' % (acc, ens_acc))
+        print('Model loss: %8.4f. Ensemble loss: %8.4f' % (loss, ens_loss))
+
+def eval_ecdf(model, loaders, criterion, dir, num_classes, **kwargs):
+    predictions_sum = np.zeros((len(loaders['test'].dataset), num_classes))
+
+    ckpt_models = find_models(dir)
+    ckpt_models.reverse() #start ensembles from epoch 300 and go back
+    #print(ckpt_models)
+    for i, path in enumerate(ckpt_models):
+        
+        print(path)
+        checkpoint = torch.load(path)
+        if 'model_state' in checkpoint.keys():
+            model.load_state_dict(checkpoint['model_state'])
+        else:
+            model.load_state_dict(checkpoint['state_dict'])
+
+        model.eval()
+
+        pred_probs, targets = predictions(loaders['test'], model)
+        acc = 100.0 * np.mean(np.argmax(pred_probs, axis=1) == targets)
+
+        predictions_sum += pred_probs
+        ens_acc = 100.0 * np.mean(np.argmax(predictions_sum, axis=1) == targets)
+
+        #test loss
+        targets_tensor = torch.tensor(targets)
+        log_predictions_tensor = torch.tensor(pred_probs).log()
+        log_ens_predictions_tensor = torch.tensor(predictions_sum/(i+1)).log()
+        
+        loss = criterion(log_predictions_tensor, targets_tensor)
+        ens_loss = criterion(log_ens_predictions_tensor, targets_tensor)
+
+        print('Model accuracy: %8.4f. Ensemble accuracy: %8.4f' % (acc, ens_acc))
+        print('Model loss: %8.4f. Ensemble loss: %8.4f' % (loss, ens_loss))
+
     return {
         'loss': ens_loss,
         'accuracy': ens_acc
