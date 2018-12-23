@@ -72,14 +72,9 @@ class KFACLaplace(torch.optim.Optimizer):
 
             # now compute inverse covariances
             #self._compute_covs(group, state)
-            ixxt, iggt = self._inv_covs(state['xxt'], state['ggt'],
-                                        state['num_locations'])
+            ixxt, iggt, ixxt_chol, iggt_chol = self._inv_covs(state['xxt'], state['ggt'], num_locations=state['num_locations'])
             state['ixxt'] = ixxt
             state['iggt'] = iggt
-            
-            # compute cholesky decompositions
-            ixxt_chol = torch.cholesky(ixxt)
-            iggt_chol = torch.cholesky(iggt)
 
             # draw samples from AZB
             # appendix B of ritter et al.
@@ -116,7 +111,7 @@ class KFACLaplace(torch.optim.Optimizer):
             if update_stats:
                 if self._iteration_counter % self.update_freq == 0:
                     self._compute_covs(group, state)
-                    ixxt, iggt = self._inv_covs(state['xxt'], state['ggt'],
+                    ixxt, iggt, _, _ = self._inv_covs(state['xxt'], state['ggt'],
                                                 state['num_locations'])
                     state['ixxt'] = ixxt
                     state['iggt'] = iggt
@@ -255,6 +250,17 @@ class KFACLaplace(torch.optim.Optimizer):
         eps = self.eps / num_locations
         diag_xxt = xxt.new(xxt.shape[0]).fill_((eps * pi) ** 0.5)
         diag_ggt = ggt.new(ggt.shape[0]).fill_((eps / pi) ** 0.5)
-        ixxt = (xxt + torch.diag(diag_xxt)).inverse()
-        iggt = (ggt + torch.diag(diag_ggt)).inverse()
-        return ixxt, iggt
+
+        # Compute cholesky
+        xxt_chol = (xxt + torch.diag(diag_xxt)).cholesky()
+        ggt_chol = (ggt + torch.diag(diag_ggt)).cholesky()
+
+        # invert cholesky
+        xxt_ichol = torch.inverse(xxt_chol)
+        ggt_ichol = torch.inverse(ggt_chol)
+
+        # invert matrix
+        ixxt = xxt_ichol.t().matmul(xxt_ichol)
+        iggt = ggt_ichol.t().matmul(ggt_ichol)
+
+        return ixxt, iggt, xxt_ichol, ggt_ichol

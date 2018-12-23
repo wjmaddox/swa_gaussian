@@ -262,7 +262,13 @@ class SWAG(torch.nn.Module):
 
         return full_logdet
 
-    def compute_logprob(self, vec=None, block=False):
+    def diag_logll(self, param_list, mean_list, var_list):
+        logprob = 0.0
+        for param, mean, scale in zip(param_list, mean_list, var_list):
+            logprob += Normal(mean, scale).log_prob(param).sum()
+        return logprob
+
+    def compute_logprob(self, vec=None, block=False, diag=False):
         mean_list, var_list, covar_mat_root_list = self.generate_mean_var_covar()
 
         if vec is None:
@@ -270,7 +276,9 @@ class SWAG(torch.nn.Module):
         else:
             param_list = unflatten_like(vec, mean_list)
         
-        if block is True:
+        if diag:
+            return self.diag_logll(param_list, mean_list, var_list)
+        elif block is True:
             return self.block_logll(param_list,mean_list, var_list, covar_mat_root_list)
         else:
             return self.full_logll(param_list,mean_list, var_list, covar_mat_root_list)
