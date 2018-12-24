@@ -17,7 +17,7 @@ parser.add_argument('--split_classes', type=int, default=None)
 parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
 parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
                     help='model name (default: VGG16)')
-parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'Laplace'], required=True)
+parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'Laplace', 'HomoNoise'], required=True)
 parser.add_argument('--save_path', type=str, default=None, required=True, help='path to npz results file')
 parser.add_argument('--N', type=int, default=20)
 parser.add_argument('--scale', type=float, default=1.0)
@@ -55,7 +55,7 @@ loaders, num_classes = data.loaders(
 
 
 print('Preparing model')
-if args.method == 'SWAG':
+if args.method == 'SWAG' or args.method == 'HomoNoise':
     model = swag.SWAG(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models = 20, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 elif args.method == 'Laplace':
     model = laplace.Laplace(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models=20, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
@@ -70,6 +70,13 @@ model.load_state_dict(checkpoint['state_dict'])
 if args.method == 'Laplace' and args.scale < 0.0:
     args.scale = checkpoint['scale']
     print('using grid search scale:', args.scale)
+
+elif args.method == 'HomoNoise':
+    std = 0.01
+    for module, name in model.params:
+        mean = module.__getattr__('%s_mean' % name)
+        module.__getattr__('%s_sq_mean' % name).copy_(mean**2 + std**2)
+                            
 
 predictions = np.zeros((len(loaders['test'].dataset), num_classes))
 targets = np.zeros(len(loaders['test'].dataset))
