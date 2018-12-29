@@ -39,6 +39,8 @@ RESULTS_PATH.mkdir(exist_ok=True)
 WEIGHTS_PATH.mkdir(exist_ok=True)
 batch_size = 2
 
+print('Initial SWA LR is: ', args.swa_lr)
+
 normalize = transforms.Normalize(mean=camvid.mean, std=camvid.std)
 train_joint_transformer = transforms.Compose([
     joint_transforms.JointRandomCrop(224), # commented for fine-tuning
@@ -93,8 +95,14 @@ if args.resume is not None:
 
 if args.swa:
     print('SWAG training')
-    swag_model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=True, n_classes = 12)
+    swag_model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=False, n_classes = 12)
     swag_model.cuda()
+
+if args.swa and args.swa_resume is not None:
+    checkpoint = torch.load(args.swa_resume)
+    swag_model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=False, max_num_models=20, loading=True, num_classes=12)
+    swag_model.cuda()
+    swag_model.load_state_dict(checkpoint['state_dict'])
 
 for epoch in range(start_epoch, N_EPOCHS+1):
     since = time.time()
@@ -142,11 +150,17 @@ for epoch in range(start_epoch, N_EPOCHS+1):
         #train_utils.save_weights(model, epoch, val_loss, val_err)
 
     if args.swa and (epoch + 1) > args.swa_start:
-        train_utils.adjust_learning_rate(args.swa_lr, LR_DECAY, optimizer, epoch, DECAY_EVERY_N_EPOCHS)
+        train_utils.adjust_learning_rate(args.swa_lr, 1., optimizer, epoch, DECAY_EVERY_N_EPOCHS)
     else:
         ### Adjust Lr ###
         train_utils.adjust_learning_rate(LR, LR_DECAY, optimizer, 
                                         epoch, DECAY_EVERY_N_EPOCHS)
 
+### Test set ###
+swag_model.sample(0.0)
+bn_update(train_loader, swag_model)
+test_loss, test_err = train_utils.test(swag_model, test_loader, criterion, epoch=1)  
+print('SWA Test - Loss: {:.4f} | Acc: {:.4f}'.format(test_loss, 1-test_err))
+
 test_loss, test_err = train_utils.test(model, test_loader, criterion, epoch=1)  
-print('Test - Loss: {:.4f} | Acc: {:.4f}'.format(test_loss, 1-test_err))
+print('SGD Test - Loss: {:.4f} | Acc: {:.4f}'.format(test_loss, 1-test_err))
