@@ -3,6 +3,8 @@ import torch
 import models, swag, data, utils, laplace
 import torch.nn.functional as F
 import numpy as np
+import losses
+import utils
 import tqdm
 
 parser = argparse.ArgumentParser(description='SGD/SWA training')
@@ -19,9 +21,10 @@ parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
                     help='model name (default: VGG16)')
 parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'Laplace', 'HomoNoise'], required=True)
 parser.add_argument('--save_path', type=str, default=None, required=True, help='path to npz results file')
-parser.add_argument('--N', type=int, default=20)
+parser.add_argument('--N', type=int, default=30)
 parser.add_argument('--scale', type=float, default=1.0)
 parser.add_argument('--cov_mat', action='store_true', help = 'use sample covariance for swag')
+parser.add_argument('--use_diag', action='store_true', help = 'use diag cov for swag')
 
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 
@@ -84,11 +87,10 @@ print(targets.size)
 
 for i in range(args.N):
     print('%d/%d' % (i + 1, args.N))
-    #model.train()
-    model.sample(scale=args.scale, cov = args.cov_mat)
-    model.eval()
-    #perform batch norm update with training data
+    sample_with_cov = args.cov_mat and not args.use_diag
+    model.sample(scale=args.scale, cov=sample_with_cov)
     utils.bn_update(loaders['train'], model)
+    model.eval()
     k = 0
     for input, target in tqdm.tqdm(loaders['test']):
         input = input.cuda(non_blocking=True)
@@ -97,6 +99,8 @@ for i in range(args.N):
         predictions[k:k+input.size()[0]] += F.softmax(output, dim=1).cpu().numpy()
         targets[k:(k+target.size(0))] = target.numpy()
         k += input.size()[0]
+
+    print(np.mean(np.argmax(predictions, axis=1) == targets))
 predictions /= args.N
 
 entropies = -np.sum(np.log(predictions + eps) * predictions, axis=1)
