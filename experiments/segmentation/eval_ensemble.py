@@ -22,6 +22,7 @@ from swag.utils import bn_update
 
 parser = argparse.ArgumentParser(description='Ensemble evaluation')
 
+
 parser.add_argument('--use_test', action='store_true',
                     help='switches between validation and test set (default: validation)')
 parser.add_argument('--data_path', type=str, default=None, metavar='PATH',
