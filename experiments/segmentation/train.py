@@ -18,7 +18,7 @@ import utils.imgs
 import utils.training as train_utils
 
 from swag.posteriors import SWAG
-from swag.utils import bn_update
+from swag.utils import bn_update, adjust_learning_rate
 
 parser = argparse.ArgumentParser(description='SGD/SWA training')
 
@@ -26,12 +26,14 @@ parser.add_argument('--data_path', type=str, default='/home/wesley/Documents/Cod
                     help='path to datasets location (default: None)')
 parser.add_argument('--dir', type=str, default=None, required=True, help='training directory (default: None)')
 
+parser.add_argument('--epochs', type=int, default=670, metavar='N', help='number of epochs to train (default: 200)')
+parser.add_argument('--batch_size', type=int, default=2, metavar='N', help='input batch size (default: 2)')
 parser.add_argument('--lr_init', type=float, default=1e-4, metavar='LR', help='initial learning rate (default: 0.01)')
 parser.add_argument('--wd', type=float, default=1e-4, help='weight decay (default: 1e-4)')
 parser.add_argument('--optimizer', type=str, choices=['RMSProp', 'SGD'], default='RMSProp')
 
 parser.add_argument('--swa', action='store_true', help='swa usage flag (default: off)')
-parser.add_argument('--swa_start', type=float, default=161, metavar='N', help='SWA start epoch number (default: 161)')
+parser.add_argument('--swa_start', type=float, default=500, metavar='N', help='SWA start epoch number (default: 161)')
 parser.add_argument('--swa_lr', type=float, default=0.02, metavar='LR', help='SWA LR (default: 0.02)')
 parser.add_argument('--swa_c_epochs', type=int, default=1, metavar='N',
                     help='SWA model collection frequency/cycle length in epochs (default: 1)')
@@ -45,11 +47,10 @@ parser.add_argument('--seed', type=int, default=1, metavar='S', help='random see
 args = parser.parse_args()
 
 CAMVID_PATH = Path(args.data_path)
-#RESULTS_PATH = Path('.results/')
-#WEIGHTS_PATH = Path('.weights/')
-#RESULTS_PATH.mkdir(exist_ok=True)
-#WEIGHTS_PATH.mkdir(exist_ok=True)
-batch_size = 2
+
+torch.backends.cudnn.benchmark = True
+torch.manual_seed(args.seed)
+torch.cuda.manual_seed(args.seed)
 
 print('Preparing directory %s' % args.dir)
 os.makedirs(args.dir, exist_ok=True)
@@ -69,7 +70,7 @@ train_dset = camvid.CamVid(CAMVID_PATH, 'train',
           normalize,
     ]))
 train_loader = torch.utils.data.DataLoader(
-    train_dset, batch_size=batch_size, shuffle=True)
+    train_dset, batch_size=args.batch_size, shuffle=True)
 
 val_dset = camvid.CamVid(
     CAMVID_PATH, 'val', joint_transform=None,
@@ -78,7 +79,7 @@ val_dset = camvid.CamVid(
         normalize
     ]))
 val_loader = torch.utils.data.DataLoader(
-    val_dset, batch_size=batch_size, shuffle=False)
+    val_dset, batch_size=args.batch_size, shuffle=False)
 
 test_dset = camvid.CamVid(
     CAMVID_PATH, 'test', joint_transform=None,
@@ -87,13 +88,11 @@ test_dset = camvid.CamVid(
         normalize
     ]))
 test_loader = torch.utils.data.DataLoader(
-    test_dset, batch_size=batch_size, shuffle=False)
+    test_dset, batch_size=args.batch_size, shuffle=False)
 
 LR = args.lr_init
 LR_DECAY = 0.995
 DECAY_EVERY_N_EPOCHS = 1
-N_EPOCHS = 900
-torch.cuda.manual_seed(args.seed)
 
 model = tiramisu.FCDenseNet67(n_classes=12).cuda()
 model.apply(train_utils.weights_init)
@@ -104,6 +103,17 @@ else:
 
 criterion = nn.NLLLoss2d(weight=camvid.class_weight.cuda()).cuda()
 start_epoch = 1
+
+def schedule(epoch):
+    t = (epoch) / (args.swa_start if args.swa else args.epochs)
+    lr_ratio = args.swa_lr / args.lr_init if args.swa else 0.01
+    if t <= 0.5:
+        factor = 1.0
+    elif t <= 0.9:
+        factor = 1.0 - (1.0 - lr_ratio) * (t - 0.5) / 0.4
+    else:
+        factor = lr_ratio
+    return args.lr_init * factor
 
 if args.resume is not None:
     print('Resume training from %s' % args.resume)
@@ -124,7 +134,7 @@ if args.swa and args.swa_resume is not None:
     swag_model.cuda()
     swag_model.load_state_dict(checkpoint['state_dict'])
 
-for epoch in range(start_epoch, N_EPOCHS+1):
+for epoch in range(start_epoch, args.epochs+1):
     since = time.time()
 
     ### Train ###
@@ -145,7 +155,7 @@ for epoch in range(start_epoch, N_EPOCHS+1):
         time_elapsed // 60, time_elapsed % 60)) 
 
     if args.swa and (epoch + 1) > args.swa_start and (epoch + 1 - args.swa_start) % args.swa_c_epochs == 0:
-        print('Saving model at epoch: ', epoch)
+        print('Saving SWA model at epoch: ', epoch)
         swag_model.collect_model(model)
         
         swag_model.sample(0.0)
@@ -170,19 +180,25 @@ for epoch in range(start_epoch, N_EPOCHS+1):
             )
         #train_utils.save_weights(model, epoch, val_loss, val_err)
 
-    if args.swa and (epoch + 1) > args.swa_start:
-        train_utils.adjust_learning_rate(args.swa_lr, 1., optimizer, epoch, DECAY_EVERY_N_EPOCHS)
-    elif args.optimizer=='RMSProp':
+    #if args.swa and (epoch + 1) > args.swa_start:
+    #    train_utils.adjust_learning_rate(args.swa_lr, 1., optimizer, epoch, DECAY_EVERY_args.epochs)
+    if args.optimizer=='RMSProp':
         ### Adjust Lr ###
         train_utils.adjust_learning_rate(LR, LR_DECAY, optimizer, 
                                         epoch, DECAY_EVERY_N_EPOCHS)
+        if args.swa and (epoch + 1) > args.swa_start:
+            LR_DECAY = 1.
+    elif args.optimizer=='SGD':
+        lr = schedule(epoch)
+        adjust_learning_rate(optimizer, lr)
     
 
 ### Test set ###
-swag_model.sample(0.0)
-bn_update(train_loader, swag_model)
-test_loss, test_err = train_utils.test(swag_model, test_loader, criterion, epoch=1)  
-print('SWA Test - Loss: {:.4f} | Acc: {:.4f}'.format(test_loss, 1-test_err))
+if args.swa:
+    swag_model.sample(0.0)
+    bn_update(train_loader, swag_model)
+    test_loss, test_err = train_utils.test(swag_model, test_loader, criterion, epoch=1)  
+    print('SWA Test - Loss: {:.4f} | Acc: {:.4f}'.format(test_loss, 1-test_err))
 
 test_loss, test_err = train_utils.test(model, test_loader, criterion, epoch=1)  
 print('SGD Test - Loss: {:.4f} | Acc: {:.4f}'.format(test_loss, 1-test_err))
