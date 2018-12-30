@@ -112,6 +112,7 @@ def schedule(epoch):
 # use a slightly modified loss function that allows input of model 
 if args.loss == 'CE':
     criterion = losses.cross_entropy
+    #criterion = F.cross_entropy
 elif args.loss == 'adv_CE':
     criterion = losses.adversarial_cross_entropy
     
