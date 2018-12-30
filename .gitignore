@@ -77,3 +77,4 @@ target/
 *.sh
 *.pdf
 .DS_Store
+*.err
