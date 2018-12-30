@@ -10,17 +10,17 @@ args = parser.parse_args()
 prefix = "srun -p default_gpu --gres=gpu:1 --mem=20G --pty python3 " + args.cmd
 for cov in ["diag", "full", "SWA"]:
     for split_classes in [0, 1]:
-        cmd = prefix + " split_classes=%d "%(split_classes) + "--file=" + os.path.join(args.path, "swag-%d"%(args.epoch)+".pt")
+        cmd = prefix + " --split_classes=%d "%(split_classes) + "--file=" + os.path.join(args.path, "swag-%d"%(args.epoch)+".pt")
         if cov == "full":
             filename = "unc_cov_split" 
         elif cov=="diag":
             filename = "unc_split"
         else:
-            filename = "unc_swa"
+            filename = "unc_swa_split"
         if cov == "diag":
             cmd += " --use_diag"
         elif cov == "SWA":
-            cmd += " --N=1 --scale=0."
+            cmd += " --N=1 --scale=0. --use_diag"
         save_path = os.path.join(args.path, filename+str(split_classes)+".npz")
         cmd += " --save_path=" + save_path
         print("Running:", cmd)
