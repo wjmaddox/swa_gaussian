@@ -1,14 +1,15 @@
 import argparse
-import torch
-import os
-os.sys.path.append("/home/izmailovpavel/Documents/Projects/private_swa_uncertainties")
-import models, swag, data, utils, losses
-import torch.nn.functional as F
 import numpy as np
-from itertools import chain, product
+import os
+import torch
 import tabulate
-import itertools
 import tqdm
+
+import torch.nn.functional as F
+from itertools import chain, product
+
+from swag import data, losses, models, utils
+from swag.posteriors.utils import find_models, eval_ecdf
 
 parser = argparse.ArgumentParser(description='SGD/SWA/SWAG ensembling')
 #parser.add_argument('--replications', type=int, default=10, help='number of passes through testing set')
@@ -75,60 +76,7 @@ print('using cross-entropy loss')
 #criterion = F.cross_entropy
 criterion = losses.cross_entropy
 
-#this is to generate the list of models we'll be searching for
-def find_models(dir):
-    all_models = os.popen('ls ' + dir + '/checkpoint*.pt').read().split('\n')
-    model_epochs = [int(t.replace('.', '-').split('-')[1]) for t in all_models[:-1]]
-    models_to_use = [t >= args.epoch for t in model_epochs]
-
-    model_names = list()
-    for model_name, use in zip(all_models, models_to_use):
-        if use is True:
-            model_names.append(model_name)
-
-    return model_names
-
-def empirical_dist_ensembling(loader, model, locs):
-    loss_sum = 0.0
-    correct = 0.0
-
-    with torch.no_grad():
-        for (input, target) in tqdm.tqdm(loader):
-
-            input = input.cuda(async=True)
-            target = target.cuda(async=True)
-
-            full_output_prob = 0.0
-            for loc in locs:
-                #randomly sample from N(swa, swa_var) with seed i
-                #swa_model.sample(scale=scale, cov=cov, seed=i+seed_base)
-                model.load_state_dict(torch.load(loc)['state_dict'])
-
-                output = model(input)
-                full_output_prob += torch.nn.Softmax(dim=1)(output)
-                #print('indiv model loss:', criterion(output,target).data.item())
-                #if criterion.__name__ == 'cross_entropy':
-                #    full_output_prob += torch.nn.Softmax(dim=1)(output) #avg of probabilities
-                #else:
-                #    full_output_prob += output #avg for mse?
-            
-            full_output_prob /= len(locs)
-
-            full_output_logit = full_output_prob.log()
-            loss = F.cross_entropy(full_output_logit, target)
-
-            loss_sum += loss.data.item() * input.size(0)
-
-            #if criterion.__name__ == 'cross_entropy':
-            pred = full_output_logit.data.argmax(1, keepdim=True)
-            correct += pred.eq(target.data.view_as(pred)).sum().item()
-            #else:
-            #    correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
-
-        return {
-            'loss': loss_sum / len(loader.dataset),
-            'accuracy': correct / len(loader.dataset) * 100.0
-        }
+#functions are now in swag.posteriors.utils
 
 ##compute point estimates for last sgd predictions
 if True:
@@ -138,7 +86,7 @@ if True:
 
     epoch = None
     for dir in args.dir:
-        dir_locs = find_models(dir)
+        dir_locs = find_models(dir, args.epoch)
         model.load_state_dict(torch.load(dir_locs[-1])['state_dict'])
         epoch = int(dir_locs[-1].replace('.', '-').split('-')[1])
         res = utils.eval(loaders['test'], model, criterion)
@@ -156,11 +104,11 @@ if not args.no_ensembles:
 
     for dir in args.dir:
         #print('now running ' + dir)
-        dir_locs = find_models(dir)
+        dir_locs = find_models(dir, args.epoch)
 
     full_value_list = []
     for i in range(len(dir_locs)):
-        res = empirical_dist_ensembling(loaders['test'], model, dir_locs[0:(i+1)])
+        res = eval_ecdf(loaders['test'], model, dir_locs[0:(i+1)])
         ensemble_loss.append(res['loss'])
         ensemble_accuracy.append(res['accuracy'])
 
@@ -175,7 +123,7 @@ if not args.no_ensembles:
 if not args.no_swa:
     for dir in args.dir:
         print('now running ' + dir)
-        dir_locs = find_models(dir)
+        dir_locs = find_models(dir, args.epoch)
 
         print('SWAG training')
         swag_model = swag.SWAG(model_cfg.base, no_cov_mat=False, max_num_models=29, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)

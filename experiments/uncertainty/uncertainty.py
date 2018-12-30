@@ -1,11 +1,13 @@
 import argparse
 import torch
-import models, swag, data, utils, laplace
 import torch.nn.functional as F
 import numpy as np
 import losses
 import utils
 import tqdm
+
+from swag import data, losses, models, utils
+from swag.posteriors import SWAG, KFACLaplace
 
 parser = argparse.ArgumentParser(description='SGD/SWA training')
 parser.add_argument('--file', type=str, default=None, required=True, help='checkpoint')
@@ -66,15 +68,9 @@ elif args.method == 'SGD':
     model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 else:
     assert False
-model.cuda()
 
-print('Loading model %s' % args.file)
-checkpoint = torch.load(args.file)
-model.load_state_dict(checkpoint['state_dict'])
-
-if args.method == 'Laplace' and args.scale < 0.0:
-    args.scale = checkpoint['scale']
-    print('using grid search scale:', args.scale)
+t_input, t_target = next(iter(loaders['train']))
+t_input, t_target = t_input.cuda(non_blocking = True), t_target.cuda(non_blocking = True)
 
 elif args.method == 'HomoNoise':
     std = 0.01

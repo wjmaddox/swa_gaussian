@@ -2,7 +2,8 @@ import numpy as np
 import torch
 import torchvision
 import os
-import regression_data
+
+from .regression_data import generate_boston, generate_boston
 
 c10_classes = np.array([
     [0, 1, 2, 8, 9],
@@ -54,10 +55,10 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
         ds = getattr(torchvision.datasets, dataset)
     except:
         if dataset == 'toy_regression':
-            ds = regression_data.generate_toy_problem
+            ds = generate_toy_problem
             regression_problem = True
         if dataset == 'boston':
-            ds = regression_data.generate_boston
+            ds = generate_boston
             regression_problem = True
             
     path = os.path.join(path, dataset.lower())
