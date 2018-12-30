@@ -174,7 +174,7 @@ def eval_swag(swag_model, loaders, criterion, path, num_classes, samples = 10, c
     for i in range(samples):
 
         #now resample and update batch norm parameters
-        swag_model.sample(scale=0.0, cov=cov, fullrank=fullrank, block = False)
+        swag_model.sample(scale=1, cov=cov, fullrank=fullrank, block = False)
         bn_update(loaders['train'], swag_model)
 
         #eval mode for testing

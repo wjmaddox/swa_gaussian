@@ -73,7 +73,8 @@ class SWAG(torch.nn.Module):
 
             sq_mean = module.__getattr__('%s_sq_mean' % name)
             eps = mean.new(mean.size()).normal_()
-            diag_sample = scale * torch.sqrt(sq_mean - mean ** 2) * eps
+            diag_sample = scale * torch.sqrt(torch.clamp(sq_mean - mean ** 2, min=0.)) * eps
+            #print( (sq_mean.double() - (mean.double() ** 2)).min() )
 
             if cov is True:
                 cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
