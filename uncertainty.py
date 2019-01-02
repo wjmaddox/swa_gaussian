@@ -19,7 +19,7 @@ parser.add_argument('--split_classes', type=int, default=None)
 parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
 parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
                     help='model name (default: VGG16)')
-parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'Laplace', 'SGD', 'HomoNoise'], required=True)
+parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'Laplace', 'SGD', 'HomoNoise', 'Dropout'], required=True)
 parser.add_argument('--save_path', type=str, default=None, required=True, help='path to npz results file')
 parser.add_argument('--N', type=int, default=30)
 parser.add_argument('--scale', type=float, default=1.0)
@@ -62,11 +62,15 @@ if args.method == 'SWAG' or args.method == 'HomoNoise':
     model = swag.SWAG(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models = 20, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 elif args.method == 'Laplace':
     model = laplace.Laplace(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models=20, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
-elif args.method == 'SGD':
+elif args.method in ['SGD', 'Dropout']:
     model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 else:
     assert False
 model.cuda()
+
+def train_dropout(m):
+    if type(m)==torch.nn.modules.dropout.Dropout:
+        m.train()
 
 print('Loading model %s' % args.file)
 checkpoint = torch.load(args.file)
@@ -89,14 +93,23 @@ print(targets.size)
 
 for i in range(args.N):
     print('%d/%d' % (i + 1, args.N))
-    if args.method != 'SGD':
+    if args.method not in ['SGD', 'Dropout']:
         sample_with_cov = args.cov_mat and not args.use_diag
         model.sample(scale=args.scale, cov=sample_with_cov)
         utils.bn_update(loaders['train'], model)
     model.eval()
+    if args.method == 'Dropout':
+        model.apply(train_dropout)
+        #torch.manual_seed(i)
+        #utils.bn_update(loaders['train'], model)
+
     k = 0
     for input, target in tqdm.tqdm(loaders['test']):
         input = input.cuda(non_blocking=True)
+        ##TODO: is this needed?
+        #if args.method == 'Dropout':
+        #    model.apply(train_dropout)
+        torch.manual_seed(i)
         output = model(input)
         with torch.no_grad():
             predictions[k:k+input.size()[0]] += F.softmax(output, dim=1).cpu().numpy()
