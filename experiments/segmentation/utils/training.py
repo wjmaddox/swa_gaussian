@@ -13,8 +13,8 @@ from torchvision.utils import save_image
 from torch.autograd import Variable
 import torch.nn.functional as F
 
-from sklearn.metrics import jaccard_similarity_score
-from sklearn.utils.multiclass import type_of_target
+#from sklearn.metrics import jaccard_similarity_score
+#from sklearn.utils.multiclass import type_of_target
 
 from . import imgs as img_utils
 
@@ -75,9 +75,11 @@ def train(model, trn_loader, optimizer, criterion, epoch):
     for idx, data in enumerate(trn_loader):
         inputs = Variable(data[0].cuda())
         targets = Variable(data[1].cuda())
+        #print(inputs.size(), targets.size())
 
         optimizer.zero_grad()
         output = model(inputs)
+        #print(output.size())
         loss = criterion(output, targets)
         loss.backward()
         optimizer.step()

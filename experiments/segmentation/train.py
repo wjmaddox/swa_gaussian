@@ -27,13 +27,18 @@ parser.add_argument('--data_path', type=str, default='/home/wesley/Documents/Cod
 parser.add_argument('--dir', type=str, default=None, required=True, help='training directory (default: None)')
 
 parser.add_argument('--epochs', type=int, default=670, metavar='N', help='number of epochs to train (default: 200)')
+parser.add_argument('--save_freq', type=int, default=10, metavar='N', help='save frequency (default: 10)')
+parser.add_argument('--eval_freq', type=int, default=5, metavar='N', help='evaluation frequency (default: 5)')
+
 parser.add_argument('--batch_size', type=int, default=2, metavar='N', help='input batch size (default: 2)')
 parser.add_argument('--lr_init', type=float, default=1e-4, metavar='LR', help='initial learning rate (default: 0.01)')
 parser.add_argument('--wd', type=float, default=1e-4, help='weight decay (default: 1e-4)')
 parser.add_argument('--optimizer', type=str, choices=['RMSProp', 'SGD'], default='RMSProp')
 
+parser.add_argument('--ft_start', type=int, default=670, help='begin fine-tuning with full sized images (default: 670)')
+
 parser.add_argument('--swa', action='store_true', help='swa usage flag (default: off)')
-parser.add_argument('--swa_start', type=float, default=500, metavar='N', help='SWA start epoch number (default: 161)')
+parser.add_argument('--swa_start', type=float, default=600, metavar='N', help='SWA start epoch number (default: 161)')
 parser.add_argument('--swa_lr', type=float, default=0.02, metavar='LR', help='SWA LR (default: 0.02)')
 parser.add_argument('--swa_c_epochs', type=int, default=1, metavar='N',
                     help='SWA model collection frequency/cycle length in epochs (default: 1)')
@@ -59,18 +64,40 @@ with open(os.path.join(args.dir, 'command.sh'), 'w') as f:
     f.write('\n')
 
 normalize = transforms.Normalize(mean=camvid.mean, std=camvid.std)
+
+# beginning train joint transformer includes random crops
 train_joint_transformer = transforms.Compose([
     joint_transforms.JointRandomCrop(224), # commented for fine-tuning
     joint_transforms.JointRandomHorizontalFlip()
     ])
-train_dset = camvid.CamVid(CAMVID_PATH, 'train',
+
+hc_train_dset = camvid.CamVid(CAMVID_PATH, 'train',
       joint_transform=train_joint_transformer,
       transform=transforms.Compose([
           transforms.ToTensor(),
           normalize,
     ]))
-train_loader = torch.utils.data.DataLoader(
-    train_dset, batch_size=args.batch_size, shuffle=True)
+hc_train_loader = torch.utils.data.DataLoader(
+    hc_train_dset, batch_size=args.batch_size, shuffle=True)
+
+print('Beginning with cropped images')
+train_loader = hc_train_loader
+
+# fine-tuning does not include random crops
+ft_train_joint_transformer = transforms.Compose([
+    joint_transforms.JointRandomHorizontalFlip()
+    ])
+ft_train_dset = camvid.CamVid(CAMVID_PATH, 'train',
+      joint_transform=ft_train_joint_transformer,
+      transform=transforms.Compose([
+          transforms.ToTensor(),
+          normalize,
+    ]))
+
+ft_train_loader = torch.utils.data.DataLoader(
+    ft_train_dset, batch_size=args.batch_size, shuffle=True)
+
+
 
 val_dset = camvid.CamVid(
     CAMVID_PATH, 'val', joint_transform=None,
@@ -138,6 +165,10 @@ for epoch in range(start_epoch, args.epochs+1):
     since = time.time()
 
     ### Train ###
+    if epoch == args.ft_start:
+        print('Now replacing data loader with fine-tuned data loader.')
+        train_loader = ft_train_loader
+
     trn_loss, trn_err = train_utils.train(
         model, train_loader, optimizer, criterion, epoch)
     print('Epoch {:d}\nTrain - Loss: {:.4f}, Acc: {:.4f}'.format(
@@ -146,9 +177,10 @@ for epoch in range(start_epoch, args.epochs+1):
     print('Train Time {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
     
-    ### Test ###
-    val_loss, val_err, val_iou = train_utils.test(model, val_loader, criterion, epoch)
-    print('Val - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(val_loss, 1-val_err, val_iou))
+    if epoch % args.eval_freq is 0:
+        ### Test ###
+        val_loss, val_err, val_iou = train_utils.test(model, val_loader, criterion, epoch)
+        print('Val - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(val_loss, 1-val_err, val_iou))
     
     time_elapsed = time.time() - since 
     print('Total Time {:.0f}m {:.0f}s\n'.format(
@@ -158,13 +190,14 @@ for epoch in range(start_epoch, args.epochs+1):
         print('Saving SWA model at epoch: ', epoch)
         swag_model.collect_model(model)
         
-        swag_model.sample(0.0)
-        bn_update(train_loader, swag_model)
-        val_loss, val_err, val_iou = train_utils.test(swag_model, val_loader, criterion, epoch)
-        print('SWAG Val - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(val_loss, 1-val_err, val_iou))
+        if epoch % args.eval_freq is 0:
+            swag_model.sample(0.0)
+            bn_update(train_loader, swag_model)
+            val_loss, val_err, val_iou = train_utils.test(swag_model, val_loader, criterion, epoch)
+            print('SWA Val - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(val_loss, 1-val_err, val_iou))
     
     ### Checkpoint ###
-    if epoch % 25 is 0:
+    if epoch % args.save_freq is 0:
         print('Saving model at Epoch: ', epoch)
         train_utils.save_checkpoint(dir=args.dir, 
                             epoch=epoch, 
@@ -180,8 +213,6 @@ for epoch in range(start_epoch, args.epochs+1):
             )
         #train_utils.save_weights(model, epoch, val_loss, val_err)
 
-    #if args.swa and (epoch + 1) > args.swa_start:
-    #    train_utils.adjust_learning_rate(args.swa_lr, 1., optimizer, epoch, DECAY_EVERY_args.epochs)
     if args.optimizer=='RMSProp':
         ### Adjust Lr ###
         train_utils.adjust_learning_rate(LR, LR_DECAY, optimizer, 
