@@ -121,7 +121,7 @@ LR = args.lr_init
 LR_DECAY = 0.995
 DECAY_EVERY_N_EPOCHS = 1
 
-model = tiramisu.FCDenseNet67(n_classes=12).cuda()
+model = tiramisu.FCDenseNet67(n_classes=11).cuda()
 model.apply(train_utils.weights_init)
 if args.optimizer == 'RMSProp':
     optimizer = torch.optim.RMSprop(model.parameters(), lr=LR, weight_decay=args.wd)
@@ -152,12 +152,12 @@ if args.resume is not None:
 
 if args.swa:
     print('SWAG training')
-    swag_model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=False, n_classes = 12)
+    swag_model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=False, n_classes = 11)
     swag_model.cuda()
 
 if args.swa and args.swa_resume is not None:
     checkpoint = torch.load(args.swa_resume)
-    swag_model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=False, max_num_models=20, loading=True, num_classes=12)
+    swag_model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=False, max_num_models=20, loading=True, num_classes=11)
     swag_model.cuda()
     swag_model.load_state_dict(checkpoint['state_dict'])
 
@@ -215,10 +215,16 @@ for epoch in range(start_epoch, args.epochs+1):
 
     if args.optimizer=='RMSProp':
         ### Adjust Lr ###
-        train_utils.adjust_learning_rate(LR, LR_DECAY, optimizer, 
-                                        epoch, DECAY_EVERY_N_EPOCHS)
+        if epoch < args.ft_start:
+            train_utils.adjust_learning_rate(LR, LR_DECAY, optimizer, 
+                                            epoch, DECAY_EVERY_N_EPOCHS)
+        else:
+            # TODO: make this an option?
+            adjust_learning_rate(optimizer, 1e-4)
+            
         if args.swa and (epoch + 1) > args.swa_start:
             LR_DECAY = 1.
+        
     elif args.optimizer=='SGD':
         lr = schedule(epoch)
         adjust_learning_rate(optimizer, lr)
