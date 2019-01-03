@@ -147,8 +147,8 @@ for epoch in range(start_epoch, args.epochs+1):
         time_elapsed // 60, time_elapsed % 60))
     
     ### Test ###
-    val_loss, val_err = train_utils.test(model, val_loader, criterion, epoch)
-    print('Val - Loss: {:.4f} | Acc: {:.4f}'.format(val_loss, 1-val_err))
+    val_loss, val_err, val_iou = train_utils.test(model, val_loader, criterion, epoch)
+    print('Val - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(val_loss, 1-val_err, val_iou))
     
     time_elapsed = time.time() - since 
     print('Total Time {:.0f}m {:.0f}s\n'.format(
@@ -160,8 +160,8 @@ for epoch in range(start_epoch, args.epochs+1):
         
         swag_model.sample(0.0)
         bn_update(train_loader, swag_model)
-        val_loss, val_err = train_utils.test(swag_model, val_loader, criterion, epoch)
-        print('SWAG Val - Loss: {:.4f} | Acc: {:.4f}'.format(val_loss, 1-val_err))
+        val_loss, val_err, val_iou = train_utils.test(swag_model, val_loader, criterion, epoch)
+        print('SWAG Val - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(val_loss, 1-val_err, val_iou))
     
     ### Checkpoint ###
     if epoch % 25 is 0:
@@ -192,13 +192,12 @@ for epoch in range(start_epoch, args.epochs+1):
         lr = schedule(epoch)
         adjust_learning_rate(optimizer, lr)
     
-
 ### Test set ###
 if args.swa:
     swag_model.sample(0.0)
     bn_update(train_loader, swag_model)
-    test_loss, test_err = train_utils.test(swag_model, test_loader, criterion, epoch=1)  
-    print('SWA Test - Loss: {:.4f} | Acc: {:.4f}'.format(test_loss, 1-test_err))
+    test_loss, test_err, test_iou = train_utils.test(swag_model, test_loader, criterion, epoch=1)  
+    print('SWA Test - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(test_loss, 1-test_err, test_iou))
 
-test_loss, test_err = train_utils.test(model, test_loader, criterion, epoch=1)  
-print('SGD Test - Loss: {:.4f} | Acc: {:.4f}'.format(test_loss, 1-test_err))
+test_loss, test_err, test_iou = train_utils.test(model, test_loader, criterion, epoch=1)  
+print('SGD Test - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(test_loss, 1-test_err, test_iou))

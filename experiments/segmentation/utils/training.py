@@ -4,6 +4,7 @@ import math
 import string
 import random
 import shutil
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -11,6 +12,9 @@ import torchvision.transforms as transforms
 from torchvision.utils import save_image
 from torch.autograd import Variable
 import torch.nn.functional as F
+
+from sklearn.metrics import jaccard_similarity_score
+from sklearn.utils.multiclass import type_of_target
 
 from . import imgs as img_utils
 
@@ -52,12 +56,16 @@ def get_predictions(output_batch):
     indices = indices.view(bs,h,w)
     return indices
 
-def error(preds, targets):
+def error(preds, targets, weights=None, num_classes = 12):
     assert preds.size() == targets.size()
     bs,h,w = preds.size()
     n_pixels = bs*h*w
-    incorrect = preds.ne(targets).cpu().sum().item()
+
+    # ignore background class
+    incorrect = (preds.ne(targets) & targets.ne(torch.ones_like(targets) * (num_classes -1))).long().cpu().sum().item()
+    #incorrect = preds.ne(targets).cpu().sum().item()
     err = incorrect/n_pixels
+
     return round(err,5)
 
 def train(model, trn_loader, optimizer, criterion, epoch):
@@ -76,7 +84,8 @@ def train(model, trn_loader, optimizer, criterion, epoch):
 
         trn_loss += loss.item()
         pred = get_predictions(output)
-        trn_error += error(pred, targets.data.cpu())
+        trn_error_curr = error(pred, targets.data.cpu())
+        trn_error += trn_error_curr
 
     trn_loss /= len(trn_loader)
     trn_error /= len(trn_loader)
@@ -87,16 +96,27 @@ def test(model, test_loader, criterion, epoch=1):
     with torch.no_grad():
         test_loss = 0
         test_error = 0
+        test_iou = []
         for data, target in test_loader:
             data = Variable(data.cuda(), volatile=True)
             target = Variable(target.cuda())
             output = model(data)
             test_loss += criterion(output, target).item()
+
+            target = target.data.cpu()
             pred = get_predictions(output)
-            test_error += error(pred, target.data.cpu())
+            test_error += error(pred, target)
+
+            test_iou.append( iou(pred, target) )
+
+        test_iou = np.array(test_iou).transpose()
+        test_iou = np.nanmean(test_iou, axis=-1)
+        print(test_iou)
+
         test_loss /= len(test_loader)
         test_error /= len(test_loader)
-        return test_loss, test_error
+        #test_iou /= len(test_loader)
+        return test_loss, test_error, test_iou.mean()
 
 def adjust_learning_rate(lr, decay, optimizer, cur_epoch, n_epochs):
     """Sets the learning rate to the initially
@@ -134,32 +154,18 @@ def view_sample_predictions(model, loader, n):
         img_utils.view_annotated(targets[i])
         img_utils.view_annotated(pred[i])
 
-def bn_update(loader, model, **kwargs):
-    """
-        BatchNorm buffers update (if any).
-        Performs 1 epochs to estimate buffers average using train dataset.
 
-        :param loader: train dataset loader for buffers average estimation.
-        :param model: model being update
-        :return: None
-    """
-    if not check_bn(model):
-        return
-    model.train()
-    momenta = {}
-    model.apply(reset_bn)
-    model.apply(lambda module: _get_momenta(module, momenta))
-    n = 0
-    for input, _ in loader:
-        input = input.cuda(non_blocking=True)
-        input_var = torch.autograd.Variable(input)
-        b = input_var.data.size(0)
-
-        momentum = b / (n + b)
-        for module in momenta.keys():
-            module.momentum = momentum
-
-        model(input_var, **kwargs)
-        n += b
-
-    model.apply(lambda module: _set_momenta(module, momenta))
+# https://github.com/Kaixhin/FCN-semantic-segmentation/blob/405f57c91894ed0dbbfc992d7f12b352cfbd6a8e/main.py#L78
+def iou(pred, target, num_classes = 12):
+    ious = []
+    # Ignore IoU for background class
+    for cls in range(num_classes - 1):
+        pred_inds = pred == cls
+        target_inds = target == cls
+        intersection = (pred_inds[target_inds]).long().sum().cpu().item()  # Cast to long to prevent overflows
+        union = pred_inds.long().sum().cpu().item() + target_inds.long().sum().cpu().item() - intersection
+        if union == 0:
+            ious.append(float('nan'))  # If there is no ground truth, do not include in evaluation
+        else:
+            ious.append(intersection / max(union, 1))
+    return ious
