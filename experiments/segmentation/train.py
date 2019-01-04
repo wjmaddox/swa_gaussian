@@ -26,7 +26,7 @@ parser.add_argument('--data_path', type=str, default='/home/wesley/Documents/Cod
                     help='path to datasets location (default: None)')
 parser.add_argument('--dir', type=str, default=None, required=True, help='training directory (default: None)')
 
-parser.add_argument('--epochs', type=int, default=670, metavar='N', help='number of epochs to train (default: 200)')
+parser.add_argument('--epochs', type=int, default=850, metavar='N', help='number of epochs to train (default: 850)')
 parser.add_argument('--save_freq', type=int, default=10, metavar='N', help='save frequency (default: 10)')
 parser.add_argument('--eval_freq', type=int, default=5, metavar='N', help='evaluation frequency (default: 5)')
 
@@ -35,10 +35,10 @@ parser.add_argument('--lr_init', type=float, default=1e-4, metavar='LR', help='i
 parser.add_argument('--wd', type=float, default=1e-4, help='weight decay (default: 1e-4)')
 parser.add_argument('--optimizer', type=str, choices=['RMSProp', 'SGD'], default='RMSProp')
 
-parser.add_argument('--ft_start', type=int, default=670, help='begin fine-tuning with full sized images (default: 670)')
+parser.add_argument('--ft_start', type=int, default=750, help='begin fine-tuning with full sized images (default: 750)')
 
 parser.add_argument('--swa', action='store_true', help='swa usage flag (default: off)')
-parser.add_argument('--swa_start', type=float, default=600, metavar='N', help='SWA start epoch number (default: 161)')
+parser.add_argument('--swa_start', type=float, default=800, metavar='N', help='SWA start epoch number (default: 161)')
 parser.add_argument('--swa_lr', type=float, default=0.02, metavar='LR', help='SWA LR (default: 0.02)')
 parser.add_argument('--swa_c_epochs', type=int, default=1, metavar='N',
                     help='SWA model collection frequency/cycle length in epochs (default: 1)')
@@ -95,9 +95,7 @@ ft_train_dset = camvid.CamVid(CAMVID_PATH, 'train',
     ]))
 
 ft_train_loader = torch.utils.data.DataLoader(
-    ft_train_dset, batch_size=args.batch_size, shuffle=True)
-
-
+    ft_train_dset, batch_size=1, shuffle=True)
 
 val_dset = camvid.CamVid(
     CAMVID_PATH, 'val', joint_transform=None,
@@ -221,7 +219,7 @@ for epoch in range(start_epoch, args.epochs+1):
         else:
             # TODO: make this an option?
             adjust_learning_rate(optimizer, 1e-4)
-            
+
         if args.swa and (epoch + 1) > args.swa_start:
             LR_DECAY = 1.
         
