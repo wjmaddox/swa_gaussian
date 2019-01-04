@@ -61,11 +61,14 @@ def error(preds, targets, weights=None, num_classes = 12):
     # ignore background class
     incorrect = (preds.ne(targets) & targets.ne(torch.ones_like(targets) * (num_classes -1))).long().cpu().sum().item()
     #incorrect = preds.ne(targets).cpu().sum().item()
-    err = incorrect/n_pixels
+
+    corrected_n_pixels = n_pixels - targets.eq(torch.ones_like(targets) * (num_classes -1)).long().cpu().sum().item()
+    #print(n_pixels, corrected_n_pixels)
+    err = incorrect/corrected_n_pixels
 
     return round(err,5)
 
-def train(model, trn_loader, optimizer, criterion, epoch):
+def train(model, trn_loader, optimizer, criterion):
     model.train()
     trn_loss = 0
     trn_error = 0
@@ -76,6 +79,8 @@ def train(model, trn_loader, optimizer, criterion, epoch):
 
         optimizer.zero_grad()
         output = model(inputs)
+
+        # pad outputs with zeros for void class
         output_padded = torch.cat([output, torch.zeros_like(targets).float().unsqueeze(1)],dim=1)
 
         loss = criterion(output_padded, targets)
@@ -91,7 +96,7 @@ def train(model, trn_loader, optimizer, criterion, epoch):
     trn_error /= len(trn_loader)
     return trn_loss, trn_error
 
-def test(model, test_loader, criterion, epoch=1):
+def test(model, test_loader, criterion):
     model.eval()
     with torch.no_grad():
         test_loss = 0

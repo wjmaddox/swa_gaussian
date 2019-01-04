@@ -168,7 +168,7 @@ for epoch in range(start_epoch, args.epochs+1):
         train_loader = ft_train_loader
 
     trn_loss, trn_err = train_utils.train(
-        model, train_loader, optimizer, criterion, epoch)
+        model, train_loader, optimizer, criterion)
     print('Epoch {:d}\nTrain - Loss: {:.4f}, Acc: {:.4f}'.format(
         epoch, trn_loss, 1-trn_err))    
     time_elapsed = time.time() - since  
@@ -177,7 +177,7 @@ for epoch in range(start_epoch, args.epochs+1):
     
     if epoch % args.eval_freq is 0:
         ### Test ###
-        val_loss, val_err, val_iou = train_utils.test(model, val_loader, criterion, epoch)
+        val_loss, val_err, val_iou = train_utils.test(model, val_loader, criterion)
         print('Val - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(val_loss, 1-val_err, val_iou))
     
     time_elapsed = time.time() - since 
@@ -191,7 +191,7 @@ for epoch in range(start_epoch, args.epochs+1):
         if epoch % args.eval_freq is 0:
             swag_model.sample(0.0)
             bn_update(train_loader, swag_model)
-            val_loss, val_err, val_iou = train_utils.test(swag_model, val_loader, criterion, epoch)
+            val_loss, val_err, val_iou = train_utils.test(swag_model, val_loader, criterion)
             print('SWA Val - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(val_loss, 1-val_err, val_iou))
     
     ### Checkpoint ###
@@ -231,8 +231,8 @@ for epoch in range(start_epoch, args.epochs+1):
 if args.swa:
     swag_model.sample(0.0)
     bn_update(train_loader, swag_model)
-    test_loss, test_err, test_iou = train_utils.test(swag_model, test_loader, criterion, epoch=1)  
+    test_loss, test_err, test_iou = train_utils.test(swag_model, test_loader, criterion)  
     print('SWA Test - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(test_loss, 1-test_err, test_iou))
 
-test_loss, test_err, test_iou = train_utils.test(model, test_loader, criterion, epoch=1)  
+test_loss, test_err, test_iou = train_utils.test(model, test_loader, criterion)  
 print('SGD Test - Loss: {:.4f} | Acc: {:.4f} | IOU: {:.4f}'.format(test_loss, 1-test_err, test_iou))
