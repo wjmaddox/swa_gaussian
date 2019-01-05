@@ -2,8 +2,8 @@ import argparse
 import torch
 import torch.nn.functional as F
 import numpy as np
-import losses
-import utils
+import os
+os.sys.path.append("/home/pi49/projects/private_swa_uncertainties")
 import tqdm
 
 from swag import data, losses, models, utils
@@ -21,7 +21,7 @@ parser.add_argument('--split_classes', type=int, default=None)
 parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
 parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
                     help='model name (default: VGG16)')
-parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'Laplace', 'SGD', 'HomoNoise', 'Dropout'], required=True)
+parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'Laplace', 'SGD', 'HomoNoise', 'Dropout', 'SWAGDrop'], required=True)
 parser.add_argument('--save_path', type=str, default=None, required=True, help='path to npz results file')
 parser.add_argument('--N', type=int, default=30)
 parser.add_argument('--scale', type=float, default=1.0)
@@ -60,10 +60,10 @@ loaders, num_classes = data.loaders(
 
 
 print('Preparing model')
-if args.method == 'SWAG' or args.method == 'HomoNoise':
-    model = swag.SWAG(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models = 20, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+if args.method in ['SWAG', 'HomoNoise', 'SWAGDrop']:
+    model = SWAG(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models = 20, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 elif args.method == 'Laplace':
-    model = laplace.Laplace(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models=20, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+    model = Laplace(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models=20, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 elif args.method in ['SGD', 'Dropout']:
     model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 else:
@@ -81,7 +81,7 @@ model.load_state_dict(checkpoint['state_dict'])
 t_input, t_target = next(iter(loaders['train']))
 t_input, t_target = t_input.cuda(non_blocking = True), t_target.cuda(non_blocking = True)
 
-elif args.method == 'HomoNoise':
+if args.method == 'HomoNoise':
     std = 0.01
     for module, name in model.params:
         mean = module.__getattr__('%s_mean' % name)
@@ -99,7 +99,7 @@ for i in range(args.N):
         model.sample(scale=args.scale, cov=sample_with_cov)
         utils.bn_update(loaders['train'], model)
     model.eval()
-    if args.method == 'Dropout':
+    if args.method in ['Dropout', 'SWAGDrop']:
         model.apply(train_dropout)
         #torch.manual_seed(i)
         #utils.bn_update(loaders['train'], model)
