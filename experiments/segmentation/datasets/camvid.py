@@ -10,11 +10,17 @@ classes = ['Sky', 'Building', 'Column-Pole', 'Road',
            'Sidewalk', 'Tree', 'Sign-Symbol', 'Fence', 'Car', 'Pedestrain',
            'Bicyclist', 'Void']
 
+# can't verify below?
 # https://github.com/yandex/segnet-torch/blob/master/datasets/camvid-gen.lua
-class_weight = torch.FloatTensor([
+""" class_weight = torch.FloatTensor([
     0.58872014284134, 0.51052379608154, 2.6966278553009,
     0.45021694898605, 1.1785038709641, 0.77028578519821, 2.4782588481903,
-    2.5273461341858, 1.0122526884079, 3.2375309467316, 4.1312313079834, 0])
+    2.5273461341858, 1.0122526884079, 3.2375309467316, 4.1312313079834, 0]) """
+class_weight = torch.FloatTensor([
+    1.0, 1.0, 1.0, 
+    1.0, 1.0, 1.0, 1.0,
+    1.0, 1.0, 1.0, 1.0, 0.0
+])
 
 mean = [0.41189489566336, 0.4251328133025, 0.4326707089857]
 std = [0.27413549931506, 0.28506257482912, 0.28284674400252]

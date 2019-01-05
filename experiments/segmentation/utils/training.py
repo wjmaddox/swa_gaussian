@@ -81,9 +81,11 @@ def train(model, trn_loader, optimizer, criterion):
         output = model(inputs)
 
         # pad outputs with zeros for void class
-        output_padded = torch.cat([output, torch.zeros_like(targets).float().unsqueeze(1)],dim=1)
+        #output_padded = torch.cat([output, torch.zeros_like(targets).float().unsqueeze(1)],dim=1)
 
-        loss = criterion(output_padded, targets)
+        #loss = criterion(output_padded, targets)
+        loss = lossfn(output, targets, criterion)
+
         loss.backward()
         optimizer.step()
 
@@ -106,8 +108,9 @@ def test(model, test_loader, criterion):
             data = Variable(data.cuda(), volatile=True)
             target = Variable(target.cuda())
             output = model(data)
-            output_padded = torch.cat([output, torch.zeros_like(target).float().unsqueeze(1)],dim=1)
-            test_loss += criterion(output_padded, target).item()
+            #output_padded = torch.cat([output, torch.zeros_like(target).float().unsqueeze(1)],dim=1)
+            #test_loss += criterion(output_padded, target).item()
+            test_loss += lossfn(output, target, criterion)
 
             target = target.data.cpu()
             pred = get_predictions(output)
@@ -175,3 +178,16 @@ def iou(pred, target, num_classes = 12):
         else:
             ious.append(intersection / max(union, 1))
     return ious
+
+def lossfn(y_pred, y_true, criterion, void_class = 11.):
+    # masked version of crossentropy loss
+
+    el = torch.ones_like(y_true) * void_class
+    mask = torch.ne(y_true, el).long()
+
+    y_true_tmp = y_true * mask
+
+    loss = criterion(y_pred, y_true_tmp)
+    loss = mask.float() * loss
+
+    return loss.sum()/mask.sum()
