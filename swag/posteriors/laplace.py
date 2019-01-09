@@ -47,8 +47,25 @@ class KFACLaplace(torch.optim.Optimizer):
                 d = {'params': params, 'mod': mod, 'layer_type': mod_class}
                 self.params.append(d)
 
+            elif 'BatchNorm' in mod_class:
+                mod.register_forward_pre_hook(self._save_input)
+                mod.register_backward_hook(self._save_grad_output)
+
+                params = [mod.weight, mod.bias]
+
+                d = {'params': params, 'mod': mod, 'layer_type': mod_class}
+                self.params.append(d)
+
         super(KFACLaplace, self).__init__(self.params, {})
         #super(KFACLaplace, self).__init__()
+
+    def cuda(self):
+        self.net.cuda()
+
+    def load_state_dict(self, checkpoint, **kwargs):
+        self.net.load_state_dict(checkpoint, **kwargs)
+
+        self.mean_state = self.net.state_dict()
 
     def eval(self):
         self.net.eval()
@@ -82,7 +99,7 @@ class KFACLaplace(torch.optim.Optimizer):
             # matmul a z b
             #print(state['ixxt'].shape, state['iggt'].shape)
             sample = ixxt_chol.matmul(z.matmul(iggt_chol)).t()
-            sample /= self.data_size #1/N term for inverse
+            sample *= (scale/self.data_size) #scale/N term for inverse
 
             if bias is not None:
                 #print(weight.shape, bias.shape, sample.shape)
@@ -136,10 +153,10 @@ class KFACLaplace(torch.optim.Optimizer):
                 del self.state[group['mod']]['gy']
         # Eventually scale the norm of the gradients
         if update_params and self.constraint_norm:
-            scale = (1. / fisher_norm) ** 0.5
+            f_scale = (1. / fisher_norm) ** 0.5
             for group in self.param_groups:
                 for param in group['params']:
-                    param.grad.data *= scale
+                    param.grad.data *= f_scale
         if update_stats:
             self._iteration_counter += 1
 
