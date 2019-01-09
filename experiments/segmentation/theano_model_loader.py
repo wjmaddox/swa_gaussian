@@ -8,7 +8,7 @@ from datasets import camvid
 from datasets import joint_transforms
 
 from models.tiramisu import FCDenseNet103
-from utils.training import test
+from utils.training import test, train
 
 from swag.utils import bn_update
 
@@ -128,7 +128,7 @@ def __main__():
 
     normalize = transforms.Normalize(mean=camvid.mean, std=camvid.std)
     train_joint_transformer = transforms.Compose([
-        #joint_transforms.JointRandomCrop(224), # commented for fine-tuning
+        joint_transforms.JointRandomCrop(224), # commented for fine-tuning
         joint_transforms.JointRandomHorizontalFlip()
         ])
     train_dset = camvid.CamVid(args.dataset_path, 'train',
@@ -149,13 +149,16 @@ def __main__():
     test_loader = torch.utils.data.DataLoader(
         test_dset, batch_size=1, shuffle=False)
 
-    # update batch norm parameters
-    #bn_update(train_loader, model)
-    #bn_update(test_loader, model)
-
     criterion = torch.nn.NLLLoss()
-    results = test(model, test_loader, criterion)  
-    print(results)
+
+    optimizer = torch.optim.RMSprop(model.parameters(), lr = 1e-4, weight_decay = 1e-4)
+
+    # update batch norm parameters
+    for i in range(50):
+        train_results = train(model, train_loader, optimizer, criterion)
+        print('Train Loss/Accuracy/IOU: ', train_results)
+        test_results = test(model, test_loader, criterion)  
+        print('Test Loss/Accuracy/IOU: ', test_results)
 
 __main__()
 
