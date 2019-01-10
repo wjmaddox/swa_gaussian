@@ -78,7 +78,7 @@ model.load_state_dict(checkpoint['state_dict'])
 
 if args.method == 'KFACLaplace':
     print(len(loaders['train'].dataset))
-    model = KFACLaplace(model, eps = 3e-4, data_size = len(loaders['train'].dataset)) #eps: weight_decay
+    model = KFACLaplace(model, eps = 5e-4, data_size = len(loaders['train'].dataset)) #eps: weight_decay
 
     t_input, t_target = next(iter(loaders['train']))
     t_input, t_target = t_input.cuda(non_blocking = True), t_target.cuda(non_blocking = True)
@@ -104,13 +104,16 @@ for i in range(args.N):
             model.net.train()
 
             loss, _ = losses.cross_entropy(model.net, t_input, t_target)
-            loss.backward()
+            loss.backward(create_graph = True)
             model.step(update_params = False)
 
     if args.method not in ['SGD', 'Dropout']:
         sample_with_cov = args.cov_mat and not args.use_diag
         model.sample(scale=args.scale, cov=sample_with_cov)
+
+    if 'SWAG' in args.method:
         utils.bn_update(loaders['train'], model)
+        
     model.eval()
     if args.method in ['Dropout', 'SWAGDrop']:
         model.apply(train_dropout)
