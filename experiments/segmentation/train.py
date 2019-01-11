@@ -32,10 +32,12 @@ parser.add_argument('--eval_freq', type=int, default=5, metavar='N', help='evalu
 
 parser.add_argument('--batch_size', type=int, default=2, metavar='N', help='input batch size (default: 2)')
 parser.add_argument('--lr_init', type=float, default=1e-4, metavar='LR', help='initial learning rate (default: 0.01)')
+parser.add_argument('--lr_decay', type=float, default=0.995, help='amount of learning rate decay per epoch (default: 0.995)')
 parser.add_argument('--wd', type=float, default=1e-4, help='weight decay (default: 1e-4)')
 parser.add_argument('--optimizer', type=str, choices=['RMSProp', 'SGD'], default='RMSProp')
 
 parser.add_argument('--ft_start', type=int, default=750, help='begin fine-tuning with full sized images (default: 750)')
+parser.add_argument('--ft_batch_size', type=int, default=1, help='fine-tuning batch size (default: 1)')
 
 parser.add_argument('--swa', action='store_true', help='swa usage flag (default: off)')
 parser.add_argument('--swa_start', type=float, default=800, metavar='N', help='SWA start epoch number (default: 161)')
@@ -95,7 +97,7 @@ ft_train_dset = camvid.CamVid(CAMVID_PATH, 'train',
     ]))
 
 ft_train_loader = torch.utils.data.DataLoader(
-    ft_train_dset, batch_size=1, shuffle=True)
+    ft_train_dset, batch_size=args.ft_batch_size, shuffle=True)
 
 val_dset = camvid.CamVid(
     CAMVID_PATH, 'val', joint_transform=None,
@@ -116,7 +118,7 @@ test_loader = torch.utils.data.DataLoader(
     test_dset, batch_size=args.batch_size, shuffle=False)
 
 LR = args.lr_init
-LR_DECAY = 0.995
+LR_DECAY = args.lr_decay
 DECAY_EVERY_N_EPOCHS = 1
 
 model = tiramisu.FCDenseNet67(n_classes=11).cuda()
@@ -210,7 +212,6 @@ for epoch in range(start_epoch, args.epochs+1):
                 name='swag',
                 state_dict=swag_model.state_dict(),
             )
-        #train_utils.save_weights(model, epoch, val_loss, val_err)
 
     if args.optimizer=='RMSProp':
         ### Adjust Lr ###
