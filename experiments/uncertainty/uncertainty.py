@@ -21,7 +21,7 @@ parser.add_argument('--split_classes', type=int, default=None)
 parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
 parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
                     help='model name (default: VGG16)')
-parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'Laplace', 'SGD', 'HomoNoise', 'Dropout', 'SWAGDrop'], required=True)
+parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'KFACLaplace', 'SGD', 'HomoNoise', 'Dropout', 'SWAGDrop'], required=True)
 parser.add_argument('--save_path', type=str, default=None, required=True, help='path to npz results file')
 parser.add_argument('--N', type=int, default=30)
 parser.add_argument('--scale', type=float, default=1.0)
@@ -62,9 +62,7 @@ loaders, num_classes = data.loaders(
 print('Preparing model')
 if args.method in ['SWAG', 'HomoNoise', 'SWAGDrop']:
     model = SWAG(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models = 20, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
-elif args.method == 'Laplace':
-    model = Laplace(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models=20, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
-elif args.method in ['SGD', 'Dropout']:
+elif args.method in ['SGD', 'Dropout', 'KFACLaplace']:
     model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 else:
     assert False
@@ -78,8 +76,12 @@ print('Loading model %s' % args.file)
 checkpoint = torch.load(args.file)
 model.load_state_dict(checkpoint['state_dict'])
 
-t_input, t_target = next(iter(loaders['train']))
-t_input, t_target = t_input.cuda(non_blocking = True), t_target.cuda(non_blocking = True)
+if args.method == 'KFACLaplace':
+    print(len(loaders['train'].dataset))
+    model = KFACLaplace(model, eps = 5e-4, data_size = len(loaders['train'].dataset)) #eps: weight_decay
+
+    t_input, t_target = next(iter(loaders['train']))
+    t_input, t_target = t_input.cuda(non_blocking = True), t_target.cuda(non_blocking = True)
 
 if args.method == 'HomoNoise':
     std = 0.01
@@ -94,10 +96,24 @@ print(targets.size)
 
 for i in range(args.N):
     print('%d/%d' % (i + 1, args.N))
+    if args.method == 'KFACLaplace':
+        ## KFAC Laplace needs one forwards pass to load the KFAC model at the beginning
+        model.net.load_state_dict(model.mean_state)
+
+        if i==0:
+            model.net.train()
+
+            loss, _ = losses.cross_entropy(model.net, t_input, t_target)
+            loss.backward(create_graph = True)
+            model.step(update_params = False)
+
     if args.method not in ['SGD', 'Dropout']:
         sample_with_cov = args.cov_mat and not args.use_diag
         model.sample(scale=args.scale, cov=sample_with_cov)
+
+    if 'SWAG' in args.method:
         utils.bn_update(loaders['train'], model)
+        
     model.eval()
     if args.method in ['Dropout', 'SWAGDrop']:
         model.apply(train_dropout)
@@ -111,7 +127,12 @@ for i in range(args.N):
         #if args.method == 'Dropout':
         #    model.apply(train_dropout)
         torch.manual_seed(i)
-        output = model(input)
+
+        if args.method == 'KFACLaplace':
+            output = model.net(input)
+        else:
+            output = model(input)
+
         with torch.no_grad():
             predictions[k:k+input.size()[0]] += F.softmax(output, dim=1).cpu().numpy()
         targets[k:(k+target.size(0))] = target.numpy()
