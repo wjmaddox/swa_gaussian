@@ -2,6 +2,21 @@ import torch
 import torch.nn.functional as F
 import copy
 
+# Hessian and Jacobian code from: https://gist.github.com/apaszke/226abdf867c4e9d6698bd198f3b45fb7
+def jacobian(y, x, create_graph=False):                                                               
+    jac = []                                                                                          
+    flat_y = y.reshape(-1)                                                                            
+    grad_y = torch.zeros_like(flat_y)                                                                 
+    for i in range(len(flat_y)):                                                                      
+        grad_y[i] = 1.                                                                                
+        grad_x, = torch.autograd.grad(flat_y, x, grad_y, retain_graph=True, create_graph=create_graph)
+        jac.append(grad_x.reshape(x.shape))                                                           
+        grad_y[i] = 0.                                                                                
+    return torch.stack(jac).reshape(y.shape + x.shape)                                                
+                                                                                                      
+def hessian(y, x):                                                                                    
+    return jacobian(jacobian(y, x, create_graph=True), x) 
+
 class KFACLaplace(torch.optim.Optimizer):
     r"""KFAC Laplace: based on Scalable Laplace
     Code is partially copied from https://github.com/Thrandis/EKFAC-pytorch/kfac.py.
@@ -47,8 +62,25 @@ class KFACLaplace(torch.optim.Optimizer):
                 d = {'params': params, 'mod': mod, 'layer_type': mod_class}
                 self.params.append(d)
 
+            elif 'BatchNorm' in mod_class:
+                mod.register_forward_pre_hook(self._save_input)
+                mod.register_backward_hook(self._save_grad_output)
+
+                params = [mod.weight, mod.bias]
+
+                d = {'params': params, 'mod': mod, 'layer_type': mod_class}
+                self.params.append(d)
+
         super(KFACLaplace, self).__init__(self.params, {})
         #super(KFACLaplace, self).__init__()
+
+    def cuda(self):
+        self.net.cuda()
+
+    def load_state_dict(self, checkpoint, **kwargs):
+        self.net.load_state_dict(checkpoint, **kwargs)
+
+        self.mean_state = self.net.state_dict()
 
     def eval(self):
         self.net.eval()
@@ -70,25 +102,36 @@ class KFACLaplace(torch.optim.Optimizer):
                 bias = None
             state = self.state[weight]
 
-            # now compute inverse covariances
-            #self._compute_covs(group, state)
-            ixxt, iggt, ixxt_chol, iggt_chol = self._inv_covs(state['xxt'], state['ggt'], num_locations=state['num_locations'])
-            state['ixxt'] = ixxt
-            state['iggt'] = iggt
+            if 'BatchNorm' in group['layer_type']:
 
-            # draw samples from AZB
-            # appendix B of ritter et al.
-            z = torch.randn(state['ixxt'].size(0), state['iggt'].size(0), device = ixxt.device, dtype = ixxt.dtype)
-            # matmul a z b
-            #print(state['ixxt'].shape, state['iggt'].shape)
-            sample = ixxt_chol.matmul(z.matmul(iggt_chol)).t()
-            sample /= self.data_size #1/N term for inverse
+                z = torch.zeros_like(weight).normal_()
+                sample = state['w_ic'].matmul(z)
 
-            if bias is not None:
-                #print(weight.shape, bias.shape, sample.shape)
-                bias_sample = sample[:, -1].contiguous().view(*bias.shape)
-                sample = sample[:, :-1]
-                #print(weight.shape, bias.shape, sample.shape)
+                if bias is not None:
+
+                    z = torch.zeros_like(bias).normal_()
+                    bias_sample = state['b_ic'].matmul(z)
+
+            else:
+                # now compute inverse covariances
+                #self._compute_covs(group, state)
+                ixxt, iggt, ixxt_chol, iggt_chol = self._inv_covs(state['xxt'], state['ggt'], num_locations=state['num_locations'])
+                state['ixxt'] = ixxt
+                state['iggt'] = iggt
+
+                # draw samples from AZB
+                # appendix B of ritter et al.
+                z = torch.randn(state['ixxt'].size(0), state['iggt'].size(0), device = ixxt.device, dtype = ixxt.dtype)
+                # matmul a z b
+                #print(state['ixxt'].shape, state['iggt'].shape)
+                sample = ixxt_chol.matmul(z.matmul(iggt_chol)).t()
+                sample *= (scale/self.data_size) #scale/N term for inverse
+
+                if bias is not None:
+                    #print(weight.shape, bias.shape, sample.shape)
+                    bias_sample = sample[:, -1].contiguous().view(*bias.shape)
+                    sample = sample[:, :-1]
+                    #print(weight.shape, bias.shape, sample.shape)
 
             #print(weight.norm(), sample.norm())
             #finally update parameters with new values as mean is current state dict
@@ -100,6 +143,7 @@ class KFACLaplace(torch.optim.Optimizer):
         #Performs one step of preconditioning.
         fisher_norm = 0.
         for group in self.param_groups:
+            print(torch.cuda.memory_allocated()/(1024**3))
             # Getting parameters
             if len(group['params']) == 2:
                 weight, bias = group['params']
@@ -107,39 +151,59 @@ class KFACLaplace(torch.optim.Optimizer):
                 weight = group['params'][0]
                 bias = None
             state = self.state[weight]
-            # Update convariances and inverses
-            if update_stats:
-                if self._iteration_counter % self.update_freq == 0:
-                    self._compute_covs(group, state)
-                    ixxt, iggt, _, _ = self._inv_covs(state['xxt'], state['ggt'],
-                                                state['num_locations'])
-                    state['ixxt'] = ixxt
-                    state['iggt'] = iggt
-                else:
-                    if self.alpha != 1:
-                        self._compute_covs(group, state)
-            if update_params:
-                # Preconditionning
-                gw, gb = self._precond(weight, bias, group, state)
-                # Updating gradients
-                if self.constraint_norm:
-                    fisher_norm += (weight.grad * gw).sum()
-                weight.grad.data = gw
+
+            print(group['layer_type'])
+            if 'BatchNorm' in group['layer_type']:
+                # now compute hessian of weights
+                diag_comp = 100 * weight.size(0) * self.eps * torch.eye(weight.size(0), device = weight.device, dtype = weight.dtype)
+                #print(weight.size())
+                weight_hessian = jacobian(weight.grad, weight) + diag_comp
+                #print(weight_hessian)
+
+                weight_inv_chol = torch.cholesky(weight_hessian)
+                state['w_ic'] = weight_inv_chol
+
                 if bias is not None:
+                    diag_comp = 100 * self.eps * torch.eye(bias.size(0), device = bias.device, dtype = bias.dtype)
+                    bias_hessian = jacobian(bias.grad, bias) + diag_comp
+
+                    state['b_ic'] = torch.cholesky(bias_hessian)
+
+            if group['layer_type'] in ['Linear', 'Conv2d']:
+
+                # Update convariances and inverses
+                if update_stats:
+                    if self._iteration_counter % self.update_freq == 0:
+                        self._compute_covs(group, state)
+                        ixxt, iggt, _, _ = self._inv_covs(state['xxt'], state['ggt'],
+                                                    state['num_locations'])
+                        state['ixxt'] = ixxt
+                        state['iggt'] = iggt
+                    else:
+                        if self.alpha != 1:
+                            self._compute_covs(group, state)
+                if update_params:
+                    # Preconditionning
+                    gw, gb = self._precond(weight, bias, group, state)
+                    # Updating gradients
                     if self.constraint_norm:
-                        fisher_norm += (bias.grad * gb).sum()
-                    bias.grad.data = gb
-            # Cleaning
-            if 'x' in self.state[group['mod']]:
-                del self.state[group['mod']]['x']
-            if 'gy' in self.state[group['mod']]:
-                del self.state[group['mod']]['gy']
+                        fisher_norm += (weight.grad * gw).sum()
+                    weight.grad.data = gw
+                    if bias is not None:
+                        if self.constraint_norm:
+                            fisher_norm += (bias.grad * gb).sum()
+                        bias.grad.data = gb
+                # Cleaning
+                if 'x' in self.state[group['mod']]:
+                    del self.state[group['mod']]['x']
+                if 'gy' in self.state[group['mod']]:
+                    del self.state[group['mod']]['gy']
         # Eventually scale the norm of the gradients
         if update_params and self.constraint_norm:
-            scale = (1. / fisher_norm) ** 0.5
+            f_scale = (1. / fisher_norm) ** 0.5
             for group in self.param_groups:
                 for param in group['params']:
-                    param.grad.data *= scale
+                    param.grad.data *= f_scale
         if update_stats:
             self._iteration_counter += 1
 
