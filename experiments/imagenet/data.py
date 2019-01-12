@@ -3,6 +3,9 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 def loaders(path, batch_size, num_workers, shuffle_train=True):
     train_dir = os.path.join(path, 'train')
     validation_dir = os.path.join(path, 'validation')
@@ -19,7 +22,7 @@ def loaders(path, batch_size, num_workers, shuffle_train=True):
     ])
 
     transform_test = transforms.Compose([
-        transforms.Scale(256),
+        transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
         normalize,

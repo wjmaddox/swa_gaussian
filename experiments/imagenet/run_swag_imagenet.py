@@ -159,10 +159,13 @@ for epoch in range(start_epoch, args.epochs):
     else:
         lr = args.lr_init
 
-    if (args.swa and (epoch + 1) > args.swa_start) and args.cov_mat:
-        train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, verbose=True)
-    else:
-        train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, verbose=True)
+    # if (args.swa and (epoch + 1) > args.swa_start) and args.cov_mat:
+    #    train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, verbose=True)
+    # else:
+    #     train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, verbose=True)
+
+    train_res = {'loss': None, 'accuracy': None}
+
 
     if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
         test_res = utils.eval(loaders['test'], model, criterion)
@@ -172,10 +175,11 @@ for epoch in range(start_epoch, args.epochs):
     if args.swa and (epoch + 1) > args.swa_start and (
             epoch + 1 - args.swa_start) % args.swa_c_epochs == 0:
         swag_model.collect_model(model)
-        if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
-            swag_model.sample(0.0)
-            utils.bn_update(loaders['train'], swag_model)
-            swag_res = utils.eval(loaders['test'], swag_model, criterion)
+        if epoch == args.swa_start or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
+            swag_res = {'loss': None, 'accuracy': None}
+            # swag_model.sample(0.0)
+            # utils.bn_update(loaders['train'], swag_model)
+            # swag_res = utils.eval(loaders['test'], swag_model, criterion)
         else:
             swag_res = {'loss': None, 'accuracy': None}
 
@@ -204,6 +208,7 @@ for epoch in range(start_epoch, args.epochs):
     table = table.split('\n')
     table = '\n'.join([table[1]] + table)
     print(table)
+    break
 
 if args.epochs % args.save_freq != 0:
     utils.save_checkpoint(
