@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 import os
 os.sys.path.append("/home/pi49/projects/private_swa_uncertainties")
+os.sys.path.append("/home/izmailovpavel/Documents/Projects/private_swa_uncertainties/")
 import tqdm
 
 from swag import data, losses, models, utils
