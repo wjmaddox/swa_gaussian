@@ -102,12 +102,15 @@ class SWAG(torch.nn.Module):
                 mean_list.append(mean_current)
 
                 cov_mat_sqrt_current = module.__getattr__('%s_cov_mat_sqrt' % name)
-                cov_mat_sqrt_list.append(cov_mat_sqrt_current)
+                #cov_mat_sqrt_list.append(cov_mat_sqrt_current)
+                cov_mat_sqrt_list.append(cov_mat_sqrt_current.cpu())
             
             #now flatten the covariances into a matrix
             cov_mat_sqrt = torch.cat(cov_mat_sqrt_list,dim=1)
-            eps = torch.zeros(cov_mat_sqrt.size(0), 1).normal_().cuda() #rank-deficient normal results
+            #eps = torch.zeros(cov_mat_sqrt.size(0), 1).normal_().cuda() #rank-deficient normal results
+            eps = torch.zeros(cov_mat_sqrt.size(0), 1).normal_() #rank-deficient normal results
             zero_mean_samples = (scale/((self.max_num_models - 1) ** 0.5)) * cov_mat_sqrt.t().matmul(eps)
+            zero_mean_samples = zero_mean_samples.cuda()
 
             #unflatten the covariances back into a list
             zero_mean_samples_list = unflatten_like(zero_mean_samples.t(), mean_list)
@@ -120,6 +123,7 @@ class SWAG(torch.nn.Module):
 
         for (module, name), sample in iterator:                    
             mean = module.__getattr__('%s_mean' % name)
+#             sample = sample.cuda()
             if scale == 0.0:
                 w = mean
             else:
