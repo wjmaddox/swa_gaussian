@@ -1,9 +1,11 @@
+import itertools
 import torch
 import os
 import copy
 from datetime import datetime
 import math
 import numpy as np
+import tqdm
 
 import torch.nn.functional as F
 
@@ -40,6 +42,9 @@ def train_epoch(loader, model, criterion, optimizer, verbose=False):
 
     model.train()
 
+    if verbose:
+        loader = tqdm.tqdm(loader)
+
     for i, (input, target) in enumerate(loader):
         input = input.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
@@ -60,7 +65,7 @@ def train_epoch(loader, model, criterion, optimizer, verbose=False):
 
         num_objects_current += input.size(0)
 
-        if verbose and 10 * num_objects_current / num_objects_total >= verb_stage + 1:
+        if verbose and 50 * num_objects_current / num_objects_total >= verb_stage + 1:
             print('Stage %d/10. Loss: %12.4f. Acc: %6.2f' % (
                 verb_stage + 1, loss_sum / num_objects_current, correct / num_objects_current * 100.0
             ))
@@ -72,13 +77,16 @@ def train_epoch(loader, model, criterion, optimizer, verbose=False):
     }
 
 
-def eval(loader, model, criterion):
+def eval(loader, model, criterion, verbose=False):
     loss_sum = 0.0
     correct = 0.0
+    num_objects_total = len(loader.dataset)
 
     model.eval()
 
     with torch.no_grad():
+        if verbose:
+            loader = tqdm.tqdm(loader)
         for i, (input, target) in enumerate(loader):
             input = input.cuda(non_blocking=True)
             target = target.cuda(non_blocking=True)
@@ -94,8 +102,8 @@ def eval(loader, model, criterion):
             #    correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
 
     return {
-        'loss': loss_sum / len(loader.dataset),
-        'accuracy': correct / len(loader.dataset) * 100.0,
+        'loss': loss_sum / num_objects_total,
+        'accuracy': correct / num_objects_total * 100.0,
     }
 
 def moving_average(net1, net2, alpha=1):
@@ -131,7 +139,7 @@ def _set_momenta(module, momenta):
         module.momentum = momenta[module]
 
 
-def bn_update(loader, model, **kwargs):
+def bn_update(loader, model, verbose=False, subset=None, **kwargs):
     """
         BatchNorm buffers update (if any).
         Performs 1 epochs to estimate buffers average using train dataset.
@@ -147,17 +155,26 @@ def bn_update(loader, model, **kwargs):
     model.apply(reset_bn)
     model.apply(lambda module: _get_momenta(module, momenta))
     n = 0
-    for input, _ in loader:
-        input = input.cuda(non_blocking=True)
-        input_var = torch.autograd.Variable(input)
-        b = input_var.data.size(0)
+    num_batches = len(loader)
 
-        momentum = b / (n + b)
-        for module in momenta.keys():
-            module.momentum = momentum
+    with torch.no_grad():
+        if subset is not None:
+            num_batches = int(num_batches * subset)
+            loader = itertools.islice(loader, num_batches)
+        if verbose:
 
-        model(input_var, **kwargs)
-        n += b
+            loader = tqdm.tqdm(loader, total=num_batches)
+        for input, _ in loader:
+            input = input.cuda(non_blocking=True)
+            input_var = torch.autograd.Variable(input)
+            b = input_var.data.size(0)
+
+            momentum = b / (n + b)
+            for module in momenta.keys():
+                module.momentum = momentum
+
+            model(input_var, **kwargs)
+            n += b
 
     model.apply(lambda module: _set_momenta(module, momenta))
 

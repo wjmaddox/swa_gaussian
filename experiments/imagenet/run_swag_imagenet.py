@@ -1,5 +1,7 @@
 import argparse
-import os, sys
+import os
+import random
+import sys
 import time
 import tabulate
 
@@ -26,6 +28,8 @@ parser.add_argument('--model', type=str, default=None, required=True, metavar='M
                     help='model name (default: None)')
 parser.add_argument('--pretrained', action='store_true',
                     help='pretrained model usage flag (default: off)')
+parser.add_argument('--parallel', action='store_true',
+                    help='data parallel model switch (default: off)')
 
 parser.add_argument('--resume', type=str, default=None, metavar='CKPT',
                     help='checkpoint to resume training from (default: None)')
@@ -72,7 +76,9 @@ with open(os.path.join(args.dir, 'command.sh'), 'w') as f:
     f.write(' '.join(sys.argv))
     f.write('\n')
 
+# torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = True
+random.seed(args.seed)
 torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
 
@@ -126,6 +132,10 @@ optimizer = torch.optim.SGD(
     weight_decay=args.wd
 )
 
+if args.parallel:
+    print('Using Data Parallel model')
+    model = torch.nn.parallel.DataParallel(model)
+
 start_epoch = 0
 if args.resume is not None:
     print('Resume training from %s' % args.resume)
@@ -159,27 +169,26 @@ for epoch in range(start_epoch, args.epochs):
     else:
         lr = args.lr_init
 
-    # if (args.swa and (epoch + 1) > args.swa_start) and args.cov_mat:
-    #    train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, verbose=True)
-    # else:
-    #     train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, verbose=True)
-
-    train_res = {'loss': None, 'accuracy': None}
-
+    print('TRAIN')
+    train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, verbose=True)
 
     if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
-        test_res = utils.eval(loaders['test'], model, criterion)
+        print('EVAL')
+        test_res = utils.eval(loaders['test'], model, criterion, verbose=True)
     else:
         test_res = {'loss': None, 'accuracy': None}
 
     if args.swa and (epoch + 1) > args.swa_start and (
             epoch + 1 - args.swa_start) % args.swa_c_epochs == 0:
         swag_model.collect_model(model)
+
         if epoch == args.swa_start or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
             swag_res = {'loss': None, 'accuracy': None}
-            # swag_model.sample(0.0)
-            # utils.bn_update(loaders['train'], swag_model)
-            # swag_res = utils.eval(loaders['test'], swag_model, criterion)
+            swag_model.sample(0.0)
+            print('SWAG BN')
+            utils.bn_update(loaders['train'], swag_model, verbose=True, subset=0.1)
+            print('SWAG EVAL')
+            swag_res = utils.eval(loaders['test'], swag_model, criterion, verbose=True)
         else:
             swag_res = {'loss': None, 'accuracy': None}
 
@@ -208,7 +217,6 @@ for epoch in range(start_epoch, args.epochs):
     table = table.split('\n')
     table = '\n'.join([table[1]] + table)
     print(table)
-    break
 
 if args.epochs % args.save_freq != 0:
     utils.save_checkpoint(
