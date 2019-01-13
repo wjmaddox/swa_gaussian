@@ -5,7 +5,8 @@ import torchvision.transforms as transforms
 
 def loaders(path, batch_size, num_workers, shuffle_train=True):
     train_dir = os.path.join(path, 'train')
-    validation_dir = os.path.join(path, 'validation')
+    #validation_dir = os.path.join(path, 'validation')
+    validation_dir = os.path.join(path, 'val')
 
     # transformations for pretrained models (https://github.com/pytorch/examples/blob/42e5b996718797e45c46a25c55b031e6768f8440/imagenet/main.py#L89-L101)
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
