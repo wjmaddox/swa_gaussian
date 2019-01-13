@@ -32,18 +32,23 @@ def save_checkpoint(dir, epoch, name='checkpoint', **kwargs):
     torch.save(state, filepath)
 
 
-def train_epoch(loader, model, criterion, optimizer, verbose=False):
+def train_epoch(loader, model, criterion, optimizer, verbose=False, subset=None):
     loss_sum = 0.0
     correct = 0.0
     num_objects_current = 0
     num_objects_total = len(loader.dataset)
     verb_stage = 0
 
+    num_batches = len(loader)
 
     model.train()
 
+    if subset is not None:
+        num_batches = int(num_batches * subset)
+        loader = itertools.islice(loader, num_batches)
+
     if verbose:
-        loader = tqdm.tqdm(loader)
+        loader = tqdm.tqdm(loader, total=num_batches)
 
     for i, (input, target) in enumerate(loader):
         input = input.cuda(non_blocking=True)
@@ -65,7 +70,7 @@ def train_epoch(loader, model, criterion, optimizer, verbose=False):
 
         num_objects_current += input.size(0)
 
-        if verbose and 50 * num_objects_current / num_objects_total >= verb_stage + 1:
+        if verbose and 10 * num_objects_current / num_objects_total >= verb_stage + 1:
             print('Stage %d/10. Loss: %12.4f. Acc: %6.2f' % (
                 verb_stage + 1, loss_sum / num_objects_current, correct / num_objects_current * 100.0
             ))

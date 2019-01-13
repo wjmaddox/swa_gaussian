@@ -49,8 +49,8 @@ parser.add_argument('--swa_start', type=float, default=161, metavar='N',
                     help='SWA start epoch number (default: 161)')
 parser.add_argument('--swa_lr', type=float, default=0.02, metavar='LR',
                     help='SWA LR (default: 0.02)')
-parser.add_argument('--swa_c_epochs', type=int, default=1, metavar='N',
-                    help='SWA model collection frequency/cycle length in epochs (default: 1)')
+parser.add_argument('--swa_freq', type=int, default=4, metavar='N',
+                    help='SWA model collection frequency/ num samples per epoch (default: 4)')
 parser.add_argument('--cov_mat', action='store_true', help='save sample covariance')
 
 parser.add_argument('--swa_resume', type=str, default=None, metavar='CKPT',
@@ -169,25 +169,30 @@ for epoch in range(start_epoch, args.epochs):
     else:
         lr = args.lr_init
 
-    print('TRAIN')
-    train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, verbose=True)
+    print('EPOCH %d. TRAIN' % (epoch + 1))
+    if args.swa and (epoch + 1) > args.swa_start:
+        subset = 1.0 / args.swa_freq
+        for i in range(args.swa_freq):
+            print('PART %d' % (i + 1))
+            train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, subset=subset, verbose=True)
+            swag_model.collect_model(model)
+    else:
+        train_res = utils.train_epoch(loaders['tr'
+                                              'ain'], model, criterion, optimizer, verbose=True)
 
     if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
-        print('EVAL')
+        print('EPOCH %d. EVAL' % (epoch + 1))
         test_res = utils.eval(loaders['test'], model, criterion, verbose=True)
     else:
         test_res = {'loss': None, 'accuracy': None}
 
-    if args.swa and (epoch + 1) > args.swa_start and (
-            epoch + 1 - args.swa_start) % args.swa_c_epochs == 0:
-        swag_model.collect_model(model)
-
+    if args.swa and (epoch + 1) > args.swa_start:
         if epoch == args.swa_start or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
             swag_res = {'loss': None, 'accuracy': None}
             swag_model.sample(0.0)
-            print('SWAG BN')
+            print('EPOCH %d. SWAG BN' % (epoch + 1))
             utils.bn_update(loaders['train'], swag_model, verbose=True, subset=0.1)
-            print('SWAG EVAL')
+            print('EPOCH %d. SWAG EVAL' % (epoch + 1))
             swag_res = utils.eval(loaders['test'], swag_model, criterion, verbose=True)
         else:
             swag_res = {'loss': None, 'accuracy': None}
