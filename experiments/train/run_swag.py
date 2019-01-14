@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 import torchvision
 
-os.sys.path.append("/home/pi49/projects/private_swa_uncertainties")
+os.sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../'))
 from swag import data, models, utils, losses
 from swag.posteriors import SWAG
 
