@@ -5,6 +5,8 @@ import string
 import random
 import shutil
 
+import numpy as np
+
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
@@ -82,21 +84,56 @@ def train(model, trn_loader, optimizer, criterion, epoch):
     trn_error /= len(trn_loader)
     return trn_loss, trn_error
 
-def test(model, test_loader, criterion, epoch=1):
+def numpy_metrics(y_pred, y_true, n_classes = 11, void_labels=[11]):
+    """
+    Similar to theano_metrics to metrics but instead y_pred and y_true are now numpy arrays
+    from: https://github.com/SimJeg/FC-DenseNet/blob/master/metrics.py
+    void label is 11 by default
+    """
+
+    # Put y_pred and y_true under the same shape
+    y_pred = np.argmax(y_pred, axis=1)
+    #y_true = y_true.flatten()
+
+    # We use not_void in case the prediction falls in the void class of the groundtruth
+    not_void = ~ np.any([y_true == label for label in void_labels], axis=0)
+
+    I = np.zeros(n_classes)
+    U = np.zeros(n_classes)
+
+    for i in range(n_classes):
+        y_true_i = y_true == i
+        y_pred_i = y_pred == i
+
+        I[i] = np.sum(y_true_i & y_pred_i)
+        U[i] = np.sum((y_true_i | y_pred_i) & not_void)
+
+    accuracy = np.sum(I) / np.sum(not_void)
+    return I, U, accuracy
+
+def test(model, test_loader, criterion, num_classes = 11):
     model.eval()
     with torch.no_grad():
         test_loss = 0
         test_error = 0
+        I_tot = np.zeros(num_classes)
+        U_tot = np.zeros(num_classes)
+        
         for data, target in test_loader:
-            data = Variable(data.cuda(), volatile=True)
-            target = Variable(target.cuda())
+            data = data.cuda(non_blocking=True)
+            target = target.cuda(non_blocking=True)
             output = model(data)
-            test_loss += criterion(output, target).item()
-            pred = get_predictions(output)
-            test_error += error(pred, target.data.cpu())
+
+            I, U, acc = numpy_metrics(output.cpu().numpy(), target.cpu().numpy(), n_classes=11, void_labels=[11])
+            print(1-batch_error, acc) #should be the same
+            I_tot += I
+            U_tot += U
+            test_error += (1 - acc)
+
         test_loss /= len(test_loader)
         test_error /= len(test_loader)
-        return test_loss, test_error
+        m_jacc = np.mean(I_tot / U_tot)
+        return test_loss, test_error, m_jacc
 
 def adjust_learning_rate(lr, decay, optimizer, cur_epoch, n_epochs):
     """Sets the learning rate to the initially
@@ -133,33 +170,3 @@ def view_sample_predictions(model, loader, n):
         img_utils.view_image(inputs[i])
         img_utils.view_annotated(targets[i])
         img_utils.view_annotated(pred[i])
-
-def bn_update(loader, model, **kwargs):
-    """
-        BatchNorm buffers update (if any).
-        Performs 1 epochs to estimate buffers average using train dataset.
-
-        :param loader: train dataset loader for buffers average estimation.
-        :param model: model being update
-        :return: None
-    """
-    if not check_bn(model):
-        return
-    model.train()
-    momenta = {}
-    model.apply(reset_bn)
-    model.apply(lambda module: _get_momenta(module, momenta))
-    n = 0
-    for input, _ in loader:
-        input = input.cuda(non_blocking=True)
-        input_var = torch.autograd.Variable(input)
-        b = input_var.data.size(0)
-
-        momentum = b / (n + b)
-        for module in momenta.keys():
-            module.momentum = momentum
-
-        model(input_var, **kwargs)
-        n += b
-
-    model.apply(lambda module: _set_momenta(module, momenta))
