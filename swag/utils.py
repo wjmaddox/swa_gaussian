@@ -30,15 +30,16 @@ def save_checkpoint(dir, epoch, name='checkpoint', **kwargs):
     torch.save(state, filepath)
 
 
-def train_epoch(loader, model, criterion, optimizer):
+def train_epoch(loader, model, criterion, optimizer, cuda=True, regression=False):
     loss_sum = 0.0
     correct = 0.0
 
     model.train()
 
     for i, (input, target) in enumerate(loader):
-        input = input.cuda(non_blocking=True)
-        target = target.cuda(non_blocking=True)
+        if cuda:
+            input = input.cuda(non_blocking=True)
+            target = target.cuda(non_blocking=True)
 
         loss, output = criterion(model, input, target)
         
@@ -48,19 +49,17 @@ def train_epoch(loader, model, criterion, optimizer):
             
         loss_sum += loss.data.item() * input.size(0)
         
-        #if criterion.__name__ == 'cross_entropy':
-        pred = output.data.argmax(1, keepdim=True)
-        correct += pred.eq(target.data.view_as(pred)).sum().item()
-        """if criterion.__name__ == 'mse_loss':
-            correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()"""
+        if not regression:
+            pred = output.data.argmax(1, keepdim=True)
+            correct += pred.eq(target.data.view_as(pred)).sum().item()
     
     return {
         'loss': loss_sum / len(loader.dataset),
-        'accuracy': correct / len(loader.dataset) * 100.0,
+        'accuracy': None if regression else correct / len(loader.dataset) * 100.0
     }
 
 
-def eval(loader, model, criterion):
+def eval(loader, model, criterion, cuda=True, regression=False):
     loss_sum = 0.0
     correct = 0.0
 
@@ -68,22 +67,21 @@ def eval(loader, model, criterion):
 
     with torch.no_grad():
         for i, (input, target) in enumerate(loader):
-            input = input.cuda(non_blocking=True)
-            target = target.cuda(non_blocking=True)
+            if cuda:
+                input = input.cuda(non_blocking=True)
+                target = target.cuda(non_blocking=True)
 
             loss, output = criterion(model, input, target)
 
             loss_sum += loss.item() * input.size(0)
 
-            #if criterion.__name__ == 'cross_entropy':
-            pred = output.data.argmax(1, keepdim=True)
-            correct += pred.eq(target.data.view_as(pred)).sum().item()
-            #if criterion.__name__ == 'mse_loss':
-            #    correct = (target.data.view_as(output) - output).pow(2).mean().sqrt().item()
+            if not regression:
+                pred = output.data.argmax(1, keepdim=True)
+                correct += pred.eq(target.data.view_as(pred)).sum().item()
 
     return {
         'loss': loss_sum / len(loader.dataset),
-        'accuracy': correct / len(loader.dataset) * 100.0,
+        'accuracy': None if regression else correct / len(loader.dataset) * 100.0,
     }
 
 def moving_average(net1, net2, alpha=1):
@@ -152,7 +150,7 @@ def bn_update(loader, model, **kwargs):
 def inv_softmax(x, eps = 1e-10):
     return torch.log(x/(1.0 - x + eps))
 
-def predictions(test_loader, model, seed = None, **kwargs):
+def predictions(test_loader, model, seed=None, cuda=True, regression=False, **kwargs):
     #will assume that model is already in eval mode
     #model.eval()
     preds = []
@@ -160,10 +158,13 @@ def predictions(test_loader, model, seed = None, **kwargs):
     for input, target in test_loader:
         if seed is not None:
             torch.manual_seed(seed)
-
-        input = input.cuda(async=True)
+        if cuda:
+            input = input.cuda(async=True)
         output = model(input, **kwargs)
-        probs = F.softmax(output, dim=1)
-        preds.append(probs.cpu().data.numpy())
+        if regression:
+            preds.append(output.cpu().data.numpy())
+        else:
+            probs = F.softmax(output, dim=1)
+            preds.append(probs.cpu().data.numpy())
         targets.append(target.numpy())
     return np.vstack(preds), np.concatenate(targets)

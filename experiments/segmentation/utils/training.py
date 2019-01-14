@@ -6,6 +6,8 @@ import random
 import shutil
 import numpy as np
 
+import numpy as np
+
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
@@ -98,34 +100,56 @@ def train(model, trn_loader, optimizer, criterion):
     trn_error /= len(trn_loader)
     return trn_loss, trn_error
 
-def test(model, test_loader, criterion):
+def numpy_metrics(y_pred, y_true, n_classes = 11, void_labels=[11]):
+    """
+    Similar to theano_metrics to metrics but instead y_pred and y_true are now numpy arrays
+    from: https://github.com/SimJeg/FC-DenseNet/blob/master/metrics.py
+    void label is 11 by default
+    """
+
+    # Put y_pred and y_true under the same shape
+    y_pred = np.argmax(y_pred, axis=1)
+    #y_true = y_true.flatten()
+
+    # We use not_void in case the prediction falls in the void class of the groundtruth
+    not_void = ~ np.any([y_true == label for label in void_labels], axis=0)
+
+    I = np.zeros(n_classes)
+    U = np.zeros(n_classes)
+
+    for i in range(n_classes):
+        y_true_i = y_true == i
+        y_pred_i = y_pred == i
+
+        I[i] = np.sum(y_true_i & y_pred_i)
+        U[i] = np.sum((y_true_i | y_pred_i) & not_void)
+
+    accuracy = np.sum(I) / np.sum(not_void)
+    return I, U, accuracy
+
+def test(model, test_loader, criterion, num_classes = 11):
     model.eval()
     with torch.no_grad():
         test_loss = 0
         test_error = 0
-        test_iou = []
+        I_tot = np.zeros(num_classes)
+        U_tot = np.zeros(num_classes)
+        
         for data, target in test_loader:
-            data = Variable(data.cuda(), volatile=True)
-            target = Variable(target.cuda())
+            data = data.cuda(non_blocking=True)
+            target = target.cuda(non_blocking=True)
             output = model(data)
-            #output_padded = torch.cat([output, torch.zeros_like(target).float().unsqueeze(1)],dim=1)
-            #test_loss += criterion(output_padded, target).item()
-            test_loss += lossfn(output, target, criterion)
 
-            target = target.data.cpu()
-            pred = get_predictions(output)
-            test_error += error(pred, target)
-
-            test_iou.append( iou(pred, target) )
-
-        test_iou = np.array(test_iou).transpose()
-        test_iou = np.nanmean(test_iou, axis=-1)
-        print(test_iou)
+            I, U, acc = numpy_metrics(output.cpu().numpy(), target.cpu().numpy(), n_classes=11, void_labels=[11])
+            print(1-batch_error, acc) #should be the same
+            I_tot += I
+            U_tot += U
+            test_error += (1 - acc)
 
         test_loss /= len(test_loader)
         test_error /= len(test_loader)
-        #test_iou /= len(test_loader)
-        return test_loss, test_error, test_iou.mean()
+        m_jacc = np.mean(I_tot / U_tot)
+        return test_loss, test_error, m_jacc
 
 def adjust_learning_rate(lr, decay, optimizer, cur_epoch, n_epochs):
     """Sets the learning rate to the initially
@@ -163,21 +187,6 @@ def view_sample_predictions(model, loader, n):
         img_utils.view_annotated(targets[i])
         img_utils.view_annotated(pred[i])
 
-
-# https://github.com/Kaixhin/FCN-semantic-segmentation/blob/405f57c91894ed0dbbfc992d7f12b352cfbd6a8e/main.py#L78
-def iou(pred, target, num_classes = 12):
-    ious = []
-    # Ignore IoU for background class
-    for cls in range(num_classes - 1):
-        pred_inds = pred == cls
-        target_inds = target == cls
-        intersection = (pred_inds[target_inds]).long().sum().cpu().item()  # Cast to long to prevent overflows
-        union = pred_inds.long().sum().cpu().item() + target_inds.long().sum().cpu().item() - intersection
-        if union == 0:
-            ious.append(float('nan'))  # If there is no ground truth, do not include in evaluation
-        else:
-            ious.append(intersection / max(union, 1))
-    return ious
 
 def lossfn(y_pred, y_true, criterion, void_class = 11.):
     # masked version of crossentropy loss
