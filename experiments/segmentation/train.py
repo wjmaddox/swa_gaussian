@@ -129,7 +129,7 @@ else:
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr_init, weight_decay = args.wd, momentum = 0.9)
 
 #criterion = nn.NLLLoss2d(weight=camvid.class_weight.cuda()).cuda()
-criterion = nn.NLLLoss(reduction='none')
+criterion = nn.NLLLoss(weight=camvid.class_weight[:-1].cuda(), reduction='none').cuda()
 start_epoch = 1
 
 def schedule(epoch):
