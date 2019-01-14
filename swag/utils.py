@@ -35,10 +35,9 @@ def save_checkpoint(dir, epoch, name='checkpoint', **kwargs):
 def train_epoch(loader, model, criterion, optimizer, verbose=False, subset=None):
     loss_sum = 0.0
     correct = 0.0
-    num_objects_current = 0
-    num_objects_total = len(loader.dataset)
     verb_stage = 0
 
+    num_objects_current = 0
     num_batches = len(loader)
 
     model.train()
@@ -70,15 +69,15 @@ def train_epoch(loader, model, criterion, optimizer, verbose=False, subset=None)
 
         num_objects_current += input.size(0)
 
-        if verbose and 10 * num_objects_current / num_objects_total >= verb_stage + 1:
+        if verbose and 10 * (i + 1) / num_batches >= verb_stage + 1:
             print('Stage %d/10. Loss: %12.4f. Acc: %6.2f' % (
                 verb_stage + 1, loss_sum / num_objects_current, correct / num_objects_current * 100.0
             ))
             verb_stage += 1
     
     return {
-        'loss': loss_sum / num_objects_total,
-        'accuracy': correct / num_objects_total * 100.0,
+        'loss': loss_sum / num_objects_current,
+        'accuracy': correct / num_objects_current * 100.0,
     }
 
 

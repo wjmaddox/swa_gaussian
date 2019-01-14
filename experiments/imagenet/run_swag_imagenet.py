@@ -173,7 +173,7 @@ for epoch in range(start_epoch, args.epochs):
     if args.swa and (epoch + 1) > args.swa_start:
         subset = 1.0 / args.swa_freq
         for i in range(args.swa_freq):
-            print('PART %d' % (i + 1))
+            print('PART %d/%d' % (i + 1, args.swa_freq))
             train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, subset=subset, verbose=True)
             swag_model.collect_model(model)
     else:
