@@ -11,7 +11,7 @@ def logits_from_probs(prob_arr):
     return np.log(prob_arr)
 
 
-def optimal_temp_scale(probs_arr, labels_arr):
+def optimal_temp_scale(probs_arr, labels_arr, lr=0.01, max_iter=50):
     probs = torch.from_numpy(probs_arr).float()
     labels = torch.from_numpy(labels_arr.astype(int))
     logits = torch.log(probs)
@@ -22,7 +22,7 @@ def optimal_temp_scale(probs_arr, labels_arr):
     
     T = Variable(torch.ones(1,), requires_grad=True)
     
-    optimizer = optim.LBFGS([T], lr=0.01, max_iter=50)
+    optimizer = optim.LBFGS([T], lr=lr, max_iter=max_iter)
     def eval():
         loss = nll_criterion(logits / T, labels)
         loss.backward()
