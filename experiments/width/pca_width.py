@@ -77,7 +77,7 @@ pca.fit(W)
 print(pca.explained_variance_ratio_ * 100.0)
 
 
-pc_idx = [0, 1, num_checkpoints - 2, num_checkpoints - 1] if num_checkpoints > 3 else list(range(num_checkpoints))
+pc_idx = [0, 1, num_checkpoints // 2, num_checkpoints - 2, num_checkpoints - 1] if num_checkpoints > 4 else list(range(num_checkpoints))
 K = len(pc_idx)
 
 ts = np.linspace(-args.dist, args.dist, args.N)
@@ -89,10 +89,10 @@ test_acc = np.zeros((K, args.N))
 test_loss = np.zeros((K, args.N))
 
 
-for i in pc_idx:
-    print('PC %d. Variance ratio: %.2f%%' % (i, pca.explained_variance_ratio_[i] * 100.0))
+for i, id in enumerate(pc_idx):
+    print('PC %d. Variance %.4f ratio: %.2f%%' % (i, pca.explained_variance_[id], pca.explained_variance_ratio_[id] * 100.0))
     mean = pca.mean_
-    v = pca.components_[i, :].copy()
+    v = pca.components_[id, :].copy()
     v /= np.linalg.norm(v)
     for j, t in enumerate(ts):
         print('t: %.2f' % t)
@@ -122,6 +122,8 @@ np.savez(
     args.save_path,
     N=num_checkpoints,
     dim=W.shape[1],
+    ts=ts,
+    explained_variance=pca.explained_variance_,
     explained_variance_ratio=pca.explained_variance_ratio_,
     pc_idx=pc_idx,
     train_acc=train_acc,
