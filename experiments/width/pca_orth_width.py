@@ -24,8 +24,10 @@ parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
 parser.add_argument('--checkpoint', action='append')
 parser.add_argument('--save_path', type=str, default=None, required=True, help='path to npz results file')
 
-parser.add_argument('--dist', type=float, default=30.0, metavar='D', help='dist to travel along a direction (default: 30.0)')
+parser.add_argument('--K', type=int, default=7, metavar='K', help='number of random rays (default: 7)')
+parser.add_argument('--dist', type=float, default=60.0, metavar='D', help='dist to travel along a direction (default: 60.0)')
 parser.add_argument('--N', type=int, default=31, metavar='N', help='number of points on a grid (default: 31)')
+
 
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 
@@ -77,23 +79,25 @@ pca.fit(W)
 print(pca.explained_variance_ratio_ * 100.0)
 
 
-pc_idx = [0, 1, num_checkpoints // 2, num_checkpoints - 2, num_checkpoints - 1] if num_checkpoints > 4 else list(range(num_checkpoints))
-K = len(pc_idx)
 
 ts = np.linspace(-args.dist, args.dist, args.N)
 
 
-train_acc = np.zeros((K, args.N))
-train_loss = np.zeros((K, args.N))
-test_acc = np.zeros((K, args.N))
-test_loss = np.zeros((K, args.N))
+train_acc = np.zeros((args.K, args.N))
+train_loss = np.zeros((args.K, args.N))
+test_acc = np.zeros((args.K, args.N))
+test_loss = np.zeros((args.K, args.N))
 
-
-for i, id in enumerate(pc_idx):
-    print('PC %d. Variance %.4f ratio: %.2f%%' % (id, pca.explained_variance_[id], pca.explained_variance_ratio_[id] * 100.0))
-    mean = pca.mean_
-    v = pca.components_[id, :].copy()
+mean = pca.mean_
+for i in range(args.K):
+    print('Ray %d/%d' % (i + 1, args.K))
+    v = np.random.normal(size=W.shape[1])
     v /= np.linalg.norm(v)
+    for j in range(pca.components_.shape[0]):
+        g = pca.components_[j, :].copy()
+        g /= np.linalg.norm(g)
+        v -= g * np.sum(g * v)
+        v /= np.linalg.norm(v)
     for j, t in enumerate(ts):
         print('t: %.2f' % t)
         w = mean + t * v
@@ -122,10 +126,10 @@ np.savez(
     args.save_path,
     N=num_checkpoints,
     dim=W.shape[1],
+    K=args.K,
     ts=ts,
     explained_variance=pca.explained_variance_,
     explained_variance_ratio=pca.explained_variance_ratio_,
-    pc_idx=pc_idx,
     train_acc=train_acc,
     train_err=100.0 - train_acc,
     train_loss=train_loss,
