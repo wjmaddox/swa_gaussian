@@ -90,7 +90,7 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
     else:
         print('You are going to run models on the test set. Are you sure?')
         if dataset == 'STL10':
-            test_set = ds(root=path, split='test', download=True, transform=transform_train)
+            test_set = ds(root=path, split='test', download=True, transform=transform_test)
             test_set.labels = cls_mapping[test_set.labels]
         else:
             test_set = ds(root=path, train=False, download=True, transform=transform_test)
