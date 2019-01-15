@@ -74,27 +74,23 @@ def train(model, trn_loader, optimizer, criterion):
     model.train()
     trn_loss = 0
     trn_error = 0
-    for idx, data in enumerate(trn_loader):
-        inputs = Variable(data[0].cuda())
-        targets = Variable(data[1].cuda())
-        #print(inputs.size(), targets.size())
+    for idx, (inputs, targets) in enumerate(trn_loader):
+        inputs = inputs.cuda(non_blocking = True)
+        targets = targets.cuda(non_blocking = True)
 
         optimizer.zero_grad()
         output = model(inputs)
 
-        # pad outputs with zeros for void class
-        #output_padded = torch.cat([output, torch.zeros_like(targets).float().unsqueeze(1)],dim=1)
-
-        #loss = criterion(output_padded, targets)
-        loss = lossfn(output, targets, criterion)
+        # use masked loss function
+        loss = masked_loss(output, targets, criterion)
 
         loss.backward()
         optimizer.step()
 
         trn_loss += loss.item()
-        pred = get_predictions(output)
-        trn_error_curr = error(pred, targets.data.cpu())
-        trn_error += trn_error_curr
+        
+        _, _, trn_acc_curr = numpy_metrics(output.data.cpu().numpy(), targets.data.cpu().numpy())
+        trn_error += (1 - trn_acc_curr)
 
     trn_loss /= len(trn_loader)
     trn_error /= len(trn_loader)
@@ -140,8 +136,9 @@ def test(model, test_loader, criterion, num_classes = 11):
             target = target.cuda(non_blocking=True)
             output = model(data)
 
+            test_loss += masked_loss(output, target, criterion)
+
             I, U, acc = numpy_metrics(output.cpu().numpy(), target.cpu().numpy(), n_classes=11, void_labels=[11])
-            print(1-batch_error, acc) #should be the same
             I_tot += I
             U_tot += U
             test_error += (1 - acc)
@@ -188,7 +185,7 @@ def view_sample_predictions(model, loader, n):
         img_utils.view_annotated(pred[i])
 
 
-def lossfn(y_pred, y_true, criterion, void_class = 11.):
+def masked_loss(y_pred, y_true, criterion, void_class = 11.):
     # masked version of crossentropy loss
 
     el = torch.ones_like(y_true) * void_class

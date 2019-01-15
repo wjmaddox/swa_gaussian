@@ -1,156 +1,175 @@
 import argparse
-import numpy as np
-import os
-import sys
-
 import torch
-import torch.nn as nn
-import torch.optim as optim
+import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
+import numpy as np
+import os
+import tqdm
+
+from pathlib import Path
 
 from models import tiramisu
 from datasets import camvid
 from datasets import joint_transforms
-import utils.imgs
-import utils.training as train_utils
+from utils.training import test
 
-from swag import data, models, utils
-#from swag.posteriors.utils import eval_ecdf, eval_dropout, eval_laplace, eval_swag
-from swag.posteriors import SWAG
-from swag.utils import bn_update
+from swag import data, losses, models, utils
+from swag.posteriors import SWAG, KFACLaplace
 
-parser = argparse.ArgumentParser(description='Ensemble evaluation')
+parser = argparse.ArgumentParser(description='SGD/SWA training')
+parser.add_argument('--file', type=str, default=None, required=True, help='checkpoint')
 
-
-parser.add_argument('--use_test', action='store_true',
-                    help='switches between validation and test set (default: validation)')
-parser.add_argument('--data_path', type=str, default=None, metavar='PATH',
+parser.add_argument('--data_path', type=str, default='/home/wesley/Documents/Code/SegNet-Tutorial/CamVid/', metavar='PATH',
                     help='path to datasets location (default: None)')
-parser.add_argument('--batch_size', type=int, default=2, metavar='N',
-                    help='input batch size (default: 2)')
-parser.add_argument('--num-workers', type=int, default=4, metavar='N',
-                    help='number of workers (default: 4)')
+parser.add_argument('--use_test', dest='use_test', action='store_true', help='use test dataset instead of validation (default: False)')
+parser.add_argument('--batch_size', type=int, default=5, metavar='N', help='input batch size (default: 5)')
+parser.add_argument('--split_classes', type=int, default=None)
+parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
+parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'KFACLaplace', 'SGD', 'HomoNoise', 'Dropout', 'SWAGDrop'], required=True)
+parser.add_argument('--save_path', type=str, default=None, required=True, help='path to npz results file')
+parser.add_argument('--N', type=int, default=30)
+parser.add_argument('--scale', type=float, default=1.0)
+parser.add_argument('--cov_mat', action='store_true', help = 'use sample covariance for swag')
+parser.add_argument('--use_diag', action='store_true', help = 'use diag cov for swag')
 
-parser.add_argument('--model', type=str, default=None, metavar='MODEL',
-                    help='model name (default: None)')
+parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 
-parser.add_argument('--ckpt', type=str, action='append', metavar='CKPT', required=True,
-                    help='checkpoint to eval, pass all the models through this parameter')
-
-parser.add_argument('--method', type=str, choices = ['empirical', 'dropout', 'SWAG', 'SWAG-Diagonal', 'SWAG-LR', 'KFACLaplace'],
-                    default = 'SWAG-Diagonal', help='method to compute ensembles with')
-
-parser.add_argument('--samples', type=int, default=10, help='number of samples to compute MC estimates, if used with method')
 args = parser.parse_args()
 
-torch.backends.cudnn.benchmark = True
+eps = 1e-12
+if args.cov_mat:
+    args.cov_mat = True
+else:
+    args.cov_mat = False
 
+torch.backends.cudnn.benchmark = True
+torch.manual_seed(args.seed)
+torch.cuda.manual_seed(args.seed)
+
+CAMVID_PATH = Path(args.data_path)
 normalize = transforms.Normalize(mean=camvid.mean, std=camvid.std)
+# fine-tuning does not include random crops
 train_joint_transformer = transforms.Compose([
-    #joint_transforms.JointRandomCrop(224), # commented for fine-tuning
     joint_transforms.JointRandomHorizontalFlip()
     ])
-train_dset = camvid.CamVid(args.data_path, 'train',
+train_dset = camvid.CamVid(CAMVID_PATH, 'train',
       joint_transform=train_joint_transformer,
       transform=transforms.Compose([
           transforms.ToTensor(),
           normalize,
     ]))
 train_loader = torch.utils.data.DataLoader(
-    train_dset, batch_size=args.batch_size, shuffle=True)
+    train_dset, batch_size=3, shuffle=True)
 
 if args.use_test:
+    print('Warning: using test dataset')
     test_dset = camvid.CamVid(
-        args.data_path, 'test', joint_transform=None,
+        CAMVID_PATH, 'test', joint_transform=None,
         transform=transforms.Compose([
             transforms.ToTensor(),
             normalize
         ]))
-    test_loader = torch.utils.data.DataLoader(
-        test_dset, batch_size=args.batch_size, shuffle=False)
 else:
+    print('Using validation dataset')
     test_dset = camvid.CamVid(
-        args.data_path, 'val', joint_transform=None,
+        CAMVID_PATH, 'val', joint_transform=None,
         transform=transforms.Compose([
             transforms.ToTensor(),
             normalize
         ]))
-    test_loader = torch.utils.data.DataLoader(
-        test_dset, batch_size=args.batch_size, shuffle=False)
 
+test_loader = torch.utils.data.DataLoader(
+    test_dset, batch_size=args.batch_size, shuffle=False)
 loaders = {'train': train_loader, 'test': test_loader}
 
-#model = tiramisu.FCDenseNet67(n_classes=12).cuda()
-criterion = nn.NLLLoss2d(weight=camvid.class_weight)
-#model.cuda()
 
-def eval_swag(model, loaders, criterion, samples, use_cov_mat, full_rank):
-    for i in range(samples):
-        model.sample(scale = 1e-3, cov = False, block = True)
-        bn_update(loaders['train'], model)
 
-        model.eval()
+print('Preparing model')
+if args.method in ['SWAG', 'HomoNoise', 'SWAGDrop']:
+    model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=not args.cov_mat, max_num_models = 0, loading = True, n_classes=11)
+elif args.method in ['SGD', 'Dropout', 'KFACLaplace']:
+    # construct and load model
+    model = tiramisu.FCDenseNet67(n_classes=11)
+else:
+    assert False
+model.cuda()
+
+def train_dropout(m):
+    if m.__module__ == torch.nn.modules.dropout.__name__:
+        #print('here')
+        m.train()
+
+print('Loading model %s' % args.file)
+checkpoint = torch.load(args.file)
+model.load_state_dict(checkpoint['state_dict'])
+
+if args.method == 'KFACLaplace':
+    print(len(loaders['train'].dataset))
+    model = KFACLaplace(model, eps = 5e-4, data_size = len(loaders['train'].dataset)) #eps: weight_decay
+
+    t_input, t_target = next(iter(loaders['train']))
+    t_input, t_target = t_input.cuda(non_blocking = True), t_target.cuda(non_blocking = True)
+
+if args.method == 'HomoNoise':
+    std = 0.01
+    for module, name in model.params:
+        mean = module.__getattr__('%s_mean' % name)
+        module.__getattr__('%s_sq_mean' % name).copy_(mean**2 + std**2)
+                            
+predictions = np.zeros((len(test_dset), 11, 360, 480))
+targets = np.zeros((len(test_dset), 360, 480))
+print(targets.size)
+
+for i in range(args.N):
+    print('%d/%d' % (i + 1, args.N))
+    if args.method == 'KFACLaplace':
+        ## KFAC Laplace needs one forwards pass to load the KFAC model at the beginning
+        model.net.load_state_dict(model.mean_state)
+
+        if i==0:
+            model.net.train()
+
+            loss, _ = losses.cross_entropy(model.net, t_input, t_target)
+            loss.backward(create_graph = True)
+            model.step(update_params = False)
+
+    if args.method not in ['SGD', 'Dropout']:
+        sample_with_cov = args.cov_mat and not args.use_diag
+        model.sample(scale=args.scale, cov=sample_with_cov)
+
+    if 'SWAG' in args.method:
+        utils.bn_update(loaders['train'], model)
+        
+    model.eval()
+    if args.method in ['Dropout', 'SWAGDrop']:
+        model.apply(train_dropout)
+
+    k = 0
+    for input, target in tqdm.tqdm(loaders['test']):
+        input = input.cuda(non_blocking=True)
+        torch.manual_seed(i)
+
+        if args.method == 'KFACLaplace':
+            output = model.net(input)
+        else:
+            output = model(input)
 
         with torch.no_grad():
-            preds, targets = [], []
-            for data, target in loaders['test']:
-                data = data.cuda()
-                output = model(data)
+            batch_probs = F.softmax(output, dim=1).cpu().numpy()
+            #print( (np.argmax(batch_probs, axis=1) == np.argmax(predictions[k:k+input.size(0),:, :, :], axis=1)).mean() )
+            predictions[k:k+input.size(0),:, :, :] += batch_probs
+        targets[k:(k+target.size(0)), :, :] = target.numpy()
+        k += input.size(0)
 
-                preds.append(output.cpu().data.numpy())
-                targets.append(target.numpy())
-            predictions = np.vstack(preds)
-            targets = np.concatenate(targets)
+    print(np.mean(np.argmax(predictions, axis=1) == targets))
+predictions /= args.N
 
-            if i is 0:
-                predictions_sum = predictions
-            else:
-                predictions_sum += predictions
-
-            acc = 100.0 * np.mean(np.argmax(predictions, axis=1) == targets)
-            ens_acc = 100.0 * np.mean(np.argmax(predictions_sum, axis=1) == targets)
-
-            predictions_sum_tensor = torch.tensor(predictions_sum)
-            predictions_tensor = torch.tensor(predictions)
-            targets_tensor = torch.tensor(targets)
-            
-            loss = criterion(predictions_tensor, targets_tensor)
-            ens_loss = criterion(predictions_sum_tensor/(i+1), targets_tensor)
-            print('Model accuracy: %8.4f. Ensemble accuracy: %8.4f' % (acc, ens_acc))
-            print('Model loss: %8.4f. Ensemble loss: %8.4f' % (loss, ens_loss))
-    return ens_acc, ens_loss
-
-            
-if args.method == 'empirical':
-    #print('Warning: args.ckpt should be a directory')
-    #eval_ecdf(model, loaders, criterion, args.ckpt, num_classes)
-    raise NotImplementedError('Ecdf is not implemented yet')
-elif args.method == 'dropout':
-    raise NotImplementedError('Dropout is not implemented yet')
-    #eval_dropout(model, loaders, criterion, args.ckpt[0], num_classes, args.samples)
-elif args.method == 'KFACLaplace':
-    raise NotImplementedError('KFAC Laplace is not implemented yet')
-    #eval_laplace(model, loaders, criterion, args.ckpt[0], num_classes, args.samples)
-else:
-    if args.method == 'SWAG-Diagonal':
-        use_cov_mat = False
-        full_rank = None
-    else:
-        use_cov_mat = True
-        
-        if args.method == 'SWAG-LR':
-            full_rank = False
-        else:
-            full_rank = True
-
-    swag_model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=False, max_num_models = 0, loading = True,
-                    n_classes = 12)
-    swag_model.cuda()
-    checkpoint = torch.load(args.ckpt[0])
-    swag_model.load_state_dict(checkpoint['state_dict'])
-
-    test_err, test_acc = eval_swag(swag_model, loaders, criterion, args.samples, use_cov_mat, full_rank)
+entropies = -np.sum(np.log(predictions + eps) * predictions, axis=1)
+np.savez(args.save_path, entropies=entropies, predictions=predictions, targets=targets)
 
 
-    
+
+
+
+

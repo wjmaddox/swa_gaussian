@@ -14,11 +14,10 @@ import torchvision.transforms as transforms
 from models import tiramisu
 from datasets import camvid
 from datasets import joint_transforms
-import utils.imgs
-import utils.training as train_utils
+from utils.training import test
 
 from swag.posteriors import SWAG
-from swag.utils import bn_update, adjust_learning_rate
+from swag.utils import adjust_learning_rate
 
 parser = argparse.ArgumentParser(description='SGD/SWA training')
 
@@ -63,58 +62,6 @@ else:
 test_loader = torch.utils.data.DataLoader(
     test_dset, batch_size=args.batch_size, shuffle=False)
 
-
-def numpy_metrics(y_pred, y_true, n_classes = 11, void_labels=11):
-    """
-    Similar to theano_metrics to metrics but instead y_pred and y_true are now numpy arrays
-    from: https://github.com/SimJeg/FC-DenseNet/blob/master/metrics.py
-    void label is 11 by default
-    """
-
-    # Put y_pred and y_true under the same shape
-    y_pred = np.argmax(y_pred, axis=1)
-    #y_true = y_true.flatten()
-
-    # We use not_void in case the prediction falls in the void class of the groundtruth
-    not_void = ~ np.any([y_true == label for label in void_labels], axis=0)
-
-    I = np.zeros(n_classes)
-    U = np.zeros(n_classes)
-
-    for i in range(n_classes):
-        y_true_i = y_true == i
-        y_pred_i = y_pred == i
-
-        I[i] = np.sum(y_true_i & y_pred_i)
-        U[i] = np.sum((y_true_i | y_pred_i) & not_void)
-
-    accuracy = np.sum(I) / np.sum(not_void)
-    return I, U, accuracy
-
-def test(model, test_loader, criterion, num_classes = 11):
-    model.eval()
-    with torch.no_grad():
-        test_loss = 0
-        test_error = 0
-        I_tot = np.zeros(num_classes)
-        U_tot = np.zeros(num_classes)
-        
-        for data, target in test_loader:
-            data = data.cuda(non_blocking=True)
-            target = target.cuda(non_blocking=True)
-            output = model(data)
-
-            I, U, acc = numpy_metrics(output.cpu().numpy(), target.cpu().numpy(), n_classes=11, void_labels=[11])
-            print(1-batch_error, acc) #should be the same
-            I_tot += I
-            U_tot += U
-            test_error += (1 - acc)
-
-        test_loss /= len(test_loader)
-        test_error /= len(test_loader)
-        m_jacc = np.mean(I_tot / U_tot)
-        return test_loss, test_error, m_jacc
-
 # construct and load model
 model = tiramisu.FCDenseNet67(n_classes=11).cuda()
 checkpoint = torch.load(args.resume)
@@ -122,7 +69,7 @@ start_epoch = checkpoint['epoch']
 print(start_epoch)
 model.load_state_dict(checkpoint['state_dict'])
 
-criterion = nn.NLLLoss(weight=camvid.class_weight[:-1].cuda()).cuda()
+criterion = nn.NLLLoss(weight=camvid.class_weight[:-1].cuda(), reduction='none').cuda()
 
 loss, err, mIOU = test(model, test_loader, criterion)
 print(loss, 1-err, mIOU)

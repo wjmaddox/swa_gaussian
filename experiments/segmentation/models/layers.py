@@ -9,7 +9,7 @@ class DenseLayer(nn.Sequential):
         self.add_module('relu', nn.ReLU(True))
         self.add_module('conv', nn.Conv2d(in_channels, growth_rate, kernel_size=3,
                                           stride=1, padding=1, bias=True))
-        self.add_module('drop', nn.Dropout2d(0.2))
+        self.add_module('drop', nn.Dropout(p=0.2))
 
     def forward(self, x):
         return super().forward(x)
