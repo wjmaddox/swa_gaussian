@@ -24,7 +24,7 @@ class KFACLaplace(torch.optim.Optimizer):
     TODO: use some sort of validation set for scaling data_size parameter
     """
     def __init__(self, net, eps, sua=False, pi=False, update_freq=1,
-                 alpha=1.0, constraint_norm=False, data_size = 50000):
+                 alpha=1.0, constraint_norm=False, data_size = 50000, use_batch_norm = False):
         """ K-FAC Preconditionner for Linear and Conv2d layers.
         Computes the K-FAC of the second moment of the gradients.
         It works for Linear and Conv2d layers and silently skip other layers.
@@ -37,11 +37,13 @@ class KFACLaplace(torch.optim.Optimizer):
             alpha (float): Running average parameter (if == 1, no r. ave.).
             constraint_norm (bool): Scale the gradients by the squared
                 fisher norm.
+            use_batch_norm: whether or not batch norm layers should be computed
         """
         self.net = net
         self.state = net.state_dict()
         self.mean_state = copy.deepcopy(self.state)
         self.data_size = data_size
+        self.use_batch_norm = use_batch_norm
 
         self.eps = eps
         self.sua = sua
@@ -62,7 +64,7 @@ class KFACLaplace(torch.optim.Optimizer):
                 d = {'params': params, 'mod': mod, 'layer_type': mod_class}
                 self.params.append(d)
 
-            elif 'BatchNorm' in mod_class:
+            elif 'BatchNorm' in mod_class and use_batch_norm:
                 mod.register_forward_pre_hook(self._save_input)
                 mod.register_backward_hook(self._save_grad_output)
 
@@ -102,7 +104,7 @@ class KFACLaplace(torch.optim.Optimizer):
                 bias = None
             state = self.state[weight]
 
-            if 'BatchNorm' in group['layer_type']:
+            if 'BatchNorm' in group['layer_type'] and self.use_batch_norm:
 
                 z = torch.zeros_like(weight).normal_()
                 sample = state['w_ic'].matmul(z)
@@ -153,7 +155,7 @@ class KFACLaplace(torch.optim.Optimizer):
             state = self.state[weight]
 
             print(group['layer_type'])
-            if 'BatchNorm' in group['layer_type']:
+            if 'BatchNorm' in group['layer_type'] and self.use_batch_norm:
                 # now compute hessian of weights
                 diag_comp = 100 * weight.size(0) * self.eps * torch.eye(weight.size(0), device = weight.device, dtype = weight.dtype)
                 #print(weight.size())
