@@ -67,7 +67,14 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
     if dataset == 'SVHN':
         return svhn_loaders(path, batch_size, num_workers, transform_train, transform_test, use_validation, val_size)
 
-    train_set = ds(root=path, train=True, download=True, transform=transform_train)
+    if dataset == 'STL10':
+        train_set = ds(root=path, split='train', download=True, transform=transform_train)
+        num_classes = 10
+        cls_mapping = np.array([0, 2, 1, 3, 4, 5, 7, 6, 8, 9])
+        train_set.labels = cls_mapping[train_set.labels]
+    else:
+        train_set = ds(root=path, train=True, download=True, transform=transform_train)
+        num_classes = max(train_set.train_labels) + 1
 
     if use_validation:
         print("Using train (" + str(len(train_set.train_data)-val_size) + ") + validation (" +str(val_size)+ ")")
@@ -82,7 +89,11 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
         delattr(test_set, 'train_labels')
     else:
         print('You are going to run models on the test set. Are you sure?')
-        test_set = ds(root=path, train=False, download=True, transform=transform_test)
+        if dataset == 'STL10':
+            test_set = ds(root=path, split='test', download=True, transform=transform_train)
+            test_set.labels = cls_mapping[test_set.labels]
+        else:
+            test_set = ds(root=path, train=False, download=True, transform=transform_test)
 
     if split_classes is not None:
         assert dataset == 'CIFAR10'
@@ -102,7 +113,6 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
         test_set.test_labels = np.where(test_set.test_labels[:, None] == c10_classes[split_classes][None, :])[1].tolist()
         print('Test: %d/%d' % (test_set.test_data.shape[0], test_mask.size))
 
-    num_classes = max(train_set.train_labels) + 1
     if regression_problem:
         num_classes = 0
 
