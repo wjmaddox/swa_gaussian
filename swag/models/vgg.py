@@ -66,6 +66,7 @@ class Base:
     kwargs = dict()
     transform_train = transforms.Compose([
         transforms.RandomHorizontalFlip(),
+        transforms.Resize(32),
         transforms.RandomCrop(32, padding=4),
         transforms.ToTensor(),
         transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
@@ -73,6 +74,7 @@ class Base:
     ])
 
     transform_test = transforms.Compose([
+        transforms.Resize(32),
         transforms.ToTensor(),
         transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
         #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
