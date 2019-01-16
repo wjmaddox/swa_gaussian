@@ -87,7 +87,7 @@ loaders = {'train': train_loader, 'test': test_loader}
 
 print('Preparing model')
 if args.method in ['SWAG', 'HomoNoise', 'SWAGDrop']:
-    model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=not args.cov_mat, max_num_models = 0, loading = True, n_classes=11)
+    model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=not args.cov_mat, max_num_models = 20, loading = True, n_classes=11)
 elif args.method in ['SGD', 'Dropout', 'KFACLaplace']:
     # construct and load model
     model = tiramisu.FCDenseNet67(n_classes=11)
@@ -160,6 +160,7 @@ for i in range(args.N):
                 output = model(input)
 
             batch_probs = F.softmax(output, dim=1).cpu().numpy()
+            print(batch_probs.min(), batch_probs.max())
             
             predictions[k:k+input.size(0), :, :, :] += batch_probs
 
