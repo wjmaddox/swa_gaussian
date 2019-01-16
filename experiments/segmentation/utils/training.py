@@ -123,13 +123,17 @@ def numpy_metrics(y_pred, y_true, n_classes = 11, void_labels=[11]):
     accuracy = np.sum(I) / np.sum(not_void)
     return I, U, accuracy
 
-def test(model, test_loader, criterion, num_classes = 11):
+def test(model, test_loader, criterion, num_classes = 11, return_outputs = False):
     model.eval()
     with torch.no_grad():
         test_loss = 0
         test_error = 0
         I_tot = np.zeros(num_classes)
         U_tot = np.zeros(num_classes)
+
+        if return_outputs:
+            output_list = []
+            target_list = []
         
         for data, target in test_loader:
             data = data.cuda(non_blocking=True)
@@ -143,10 +147,18 @@ def test(model, test_loader, criterion, num_classes = 11):
             U_tot += U
             test_error += (1 - acc)
 
+            if return_outputs:
+                output_list.append(output.cpu().numpy())
+                target_list.append(target.cpu().numpy())
+
         test_loss /= len(test_loader)
         test_error /= len(test_loader)
         m_jacc = np.mean(I_tot / U_tot)
-        return test_loss, test_error, m_jacc
+
+        if not return_outputs:
+            return test_loss, test_error, m_jacc
+        else:
+            return test_loss, test_error, m_jacc, {'outputs': output_list, 'targets': target_list}
 
 def adjust_learning_rate(lr, decay, optimizer, cur_epoch, n_epochs):
     """Sets the learning rate to the initially

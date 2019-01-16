@@ -153,7 +153,7 @@ if args.resume is not None:
 
 if args.swa:
     print('SWAG training')
-    swag_model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=False, n_classes = 11)
+    swag_model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=False, max_num_models = 20, n_classes = 11)
     swag_model.cuda()
 
 if args.swa and args.swa_resume is not None:

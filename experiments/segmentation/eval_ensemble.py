@@ -23,7 +23,7 @@ parser.add_argument('--file', type=str, default=None, required=True, help='check
 parser.add_argument('--data_path', type=str, default='/home/wesley/Documents/Code/SegNet-Tutorial/CamVid/', metavar='PATH',
                     help='path to datasets location (default: None)')
 parser.add_argument('--use_test', dest='use_test', action='store_true', help='use test dataset instead of validation (default: False)')
-parser.add_argument('--batch_size', type=int, default=5, metavar='N', help='input batch size (default: 5)')
+parser.add_argument('--batch_size', type=int, default=1, metavar='N', help='input batch size (default: 5)')
 parser.add_argument('--split_classes', type=int, default=None)
 parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
 parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'KFACLaplace', 'SGD', 'HomoNoise', 'Dropout', 'SWAGDrop'], required=True)
@@ -119,6 +119,7 @@ if args.method == 'HomoNoise':
                             
 predictions = np.zeros((len(test_dset), 11, 360, 480))
 targets = np.zeros((len(test_dset), 360, 480))
+#predictions_list = []
 print(targets.size)
 
 for i in range(args.N):
@@ -136,7 +137,8 @@ for i in range(args.N):
 
     if args.method not in ['SGD', 'Dropout']:
         sample_with_cov = args.cov_mat and not args.use_diag
-        model.sample(scale=args.scale, cov=sample_with_cov)
+        with torch.no_grad():
+            model.sample(scale=args.scale, cov=sample_with_cov)
 
     if 'SWAG' in args.method:
         utils.bn_update(loaders['train'], model)
@@ -146,21 +148,28 @@ for i in range(args.N):
         model.apply(train_dropout)
 
     k = 0
+    current_predictions = np.zeros_like(predictions)
     for input, target in tqdm.tqdm(loaders['test']):
         input = input.cuda(non_blocking=True)
         torch.manual_seed(i)
 
-        if args.method == 'KFACLaplace':
-            output = model.net(input)
-        else:
-            output = model(input)
-
         with torch.no_grad():
+            if args.method == 'KFACLaplace':
+                output = model.net(input)
+            else:
+                output = model(input)
+
             batch_probs = F.softmax(output, dim=1).cpu().numpy()
-            #print( (np.argmax(batch_probs, axis=1) == np.argmax(predictions[k:k+input.size(0),:, :, :], axis=1)).mean() )
-            predictions[k:k+input.size(0),:, :, :] += batch_probs
+            
+            predictions[k:k+input.size(0), :, :, :] += batch_probs
+
+            current_predictions[k:k+input.size(0), :, :, :] = batch_probs
+
         targets[k:(k+target.size(0)), :, :] = target.numpy()
         k += input.size(0)
+
+    np.savez(args.save_path+'pred_'+str(i), predictions = current_predictions)
+    #predictions_list.append(current_predictions)
 
     print(np.mean(np.argmax(predictions, axis=1) == targets))
 predictions /= args.N
