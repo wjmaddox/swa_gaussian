@@ -110,6 +110,32 @@ def eval(loader, model, criterion, verbose=False):
         'accuracy': correct / num_objects_total * 100.0,
     }
 
+def predict(loader, model, verbose=False):
+    predictions = list()
+    targets = list()
+
+    model.eval()
+
+    if verbose:
+        loader = tqdm.tqdm(loader)
+
+    offset = 0
+    with torch.no_grad():
+        for input, target in loader:
+            input = input.cuda(non_blocking=True)
+            output = model(input)
+
+            batch_size = input.size(0)
+            predictions.append(F.softmax(output, dim=1).cpu().numpy())
+            targets.append(target.numpy())
+            offset += batch_size
+
+    return {
+        'predictions': np.vstack(predictions),
+        'targets': np.concatenate(targets)
+    }
+
+
 def moving_average(net1, net2, alpha=1):
     for param1, param2 in zip(net1.parameters(), net2.parameters()):
         param1.data *= (1.0 - alpha)

@@ -137,7 +137,7 @@ class SWAG(torch.nn.Module):
                 else:
                     sq_mean = module.__getattr__('%s_sq_mean' % name)
                     eps = mean.new(mean.size()).normal_()
-                    w = mean + scale * torch.sqrt(sq_mean - mean ** 2) * eps
+                    w = mean + scale * torch.sqrt(sq_mean - mean ** 2 + 1e-12) * eps
             module.__setattr__(name, w)
 
     def collect_model(self, base_model):
