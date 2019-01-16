@@ -32,7 +32,7 @@ def swag_parameters(module, params, no_cov_mat=True, num_models=0):
         module.register_buffer('%s_sq_mean' % name, data.new(data.size()).zero_())
 
         if no_cov_mat is False:
-            module.register_buffer('%s_cov_mat_sqrt' % name, torch.zeros(num_models,data.numel()).cuda())
+            module.register_buffer( '%s_cov_mat_sqrt' % name, data.new_empty((num_models, data.numel())).zero_() )
 
         params.append((module, name))
 
@@ -95,61 +95,53 @@ class SWAG(torch.nn.Module):
             module.__setattr__(name, w)
 
     def sample_fullrank(self, scale, cov, fullrank):
-        #different sampling procedure to prevent block-diagonal gaussians from being sampled
-        if cov is True and scale != 0.0:
-            #combine all cov mats and means into a list
-            #TODO: change unflatten like to to allow for a list of sizes for decreased memory
+        scale_sqrt = scale ** 0.5
+
+        mean_list = []
+        sq_mean_list = []
+
+        if cov:
             cov_mat_sqrt_list = []
-            mean_list = []
-            for module, name in self.params:
-                mean_current = module.__getattr__('%s_mean' % name)
-                mean_list.append(mean_current)
 
-                cov_mat_sqrt_current = module.__getattr__('%s_cov_mat_sqrt' % name)
-                cov_mat_sqrt_list.append(cov_mat_sqrt_current)
-            
-            # flatten the covariances into a matrix
-            cov_mat_sqrt = torch.cat(cov_mat_sqrt_list,dim=1)
-
-            # draw rank-deficient normal
-            eps = cov_mat_sqrt.new_empty((cov_mat_sqrt.size(0), 1)).normal_()
-            
-            # rescale by scale/sqrt(N-1) for scaling + variance
-            zero_mean_samples = (scale/((self.max_num_models - 1) ** 0.5)) * cov_mat_sqrt.t().matmul(eps)
-
-            #unflatten the covariances back into a list
-            zero_mean_samples_list = unflatten_like(zero_mean_samples.t(), mean_list)
-            del mean_list
-
-        if cov is not True:
-            iterator = zip(self.params, self.params)
-        else:
-            iterator = zip(self.params, zero_mean_samples_list)
-
-        for (module, name), sample in iterator:                    
+        for (module, name) in self.params:
             mean = module.__getattr__('%s_mean' % name)
+            sq_mean = module.__getattr__('%s_sq_mean' % name)
 
-            if scale == 0.0:
-                w = mean
-            else:
-                sq_mean = module.__getattr__('%s_sq_mean' % name)
-                eps = torch.randn_like(mean)
-                
-                var = torch.clamp(sq_mean - mean ** 2, self.var_clamp)
+            if cov:
+                cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
+                cov_mat_sqrt_list.append( cov_mat_sqrt )
 
-                scaled_diag_sample = scale * torch.sqrt(var) * eps
+            mean_list.append( mean )
+            sq_mean_list.append( sq_mean )
 
-                if cov is True:
-                    if fullrank:
-                        #see Section 3.3 of variational boosting
-                        #Cov(D'z_1 + sigma I z_2) = DD' + sigma I
-                        w = mean + sample.view_as(mean) + scaled_diag_sample
-                    else:
-                        w = mean + sample.view_as(mean)
+        mean = flatten(mean_list)
+        sq_mean = flatten(sq_mean_list)
 
-                else:
-                    w = mean + scaled_diag_sample
-            module.__setattr__(name, w)
+        # draw diagonal variance sample
+        var = torch.clamp(sq_mean - mean ** 2, self.var_clamp)
+        var_sample = var.sqrt() * torch.randn_like(var)
+
+        # if covariance draw low rank sample
+        if cov:
+            cov_mat_sqrt = torch.cat(cov_mat_sqrt_list, dim=1)
+
+            cov_sample = cov_mat_sqrt.t().matmul(cov_mat_sqrt.new_empty((cov_mat_sqrt.size(0),)).normal_())
+            cov_sample /= ((self.max_num_models-1)**0.5) 
+
+            rand_sample = var_sample + cov_sample
+        else:
+            rand_sample = var_sample
+
+        # update sample with mean and scale 
+        sample = mean + scale_sqrt * rand_sample
+        sample = sample.unsqueeze(0)
+
+        # unflatten new sample like the mean sample
+        samples_list = unflatten_like(sample, mean_list)
+
+
+        for (module, name), sample in zip(self.params, samples_list):
+            module.__setattr__(name, sample)
 
     def collect_model(self, base_model):
         for (module, name), base_param in zip(self.params, base_model.parameters()):
