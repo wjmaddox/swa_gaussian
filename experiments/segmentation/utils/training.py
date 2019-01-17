@@ -4,6 +4,7 @@ import math
 import string
 import random
 import shutil
+import numpy as np
 
 import numpy as np
 
@@ -54,31 +55,42 @@ def get_predictions(output_batch):
     indices = indices.view(bs,h,w)
     return indices
 
-def error(preds, targets):
+def error(preds, targets, weights=None, num_classes = 12):
     assert preds.size() == targets.size()
     bs,h,w = preds.size()
     n_pixels = bs*h*w
-    incorrect = preds.ne(targets).cpu().sum().item()
-    err = incorrect/n_pixels
+
+    # ignore background class
+    incorrect = (preds.ne(targets) & targets.ne(torch.ones_like(targets) * (num_classes -1))).long().cpu().sum().item()
+    #incorrect = preds.ne(targets).cpu().sum().item()
+
+    corrected_n_pixels = n_pixels - targets.eq(torch.ones_like(targets) * (num_classes -1)).long().cpu().sum().item()
+    #print(n_pixels, corrected_n_pixels)
+    err = incorrect/corrected_n_pixels
+
     return round(err,5)
 
-def train(model, trn_loader, optimizer, criterion, epoch):
+def train(model, trn_loader, optimizer, criterion):
     model.train()
     trn_loss = 0
     trn_error = 0
-    for idx, data in enumerate(trn_loader):
-        inputs = Variable(data[0].cuda())
-        targets = Variable(data[1].cuda())
+    for idx, (inputs, targets) in enumerate(trn_loader):
+        inputs = inputs.cuda(non_blocking = True)
+        targets = targets.cuda(non_blocking = True)
 
         optimizer.zero_grad()
         output = model(inputs)
-        loss = criterion(output, targets)
+
+        # use masked loss function
+        loss = masked_loss(output, targets, criterion)
+
         loss.backward()
         optimizer.step()
 
         trn_loss += loss.item()
-        pred = get_predictions(output)
-        trn_error += error(pred, targets.data.cpu())
+        
+        _, _, trn_acc_curr = numpy_metrics(output.data.cpu().numpy(), targets.data.cpu().numpy())
+        trn_error += (1 - trn_acc_curr)
 
     trn_loss /= len(trn_loader)
     trn_error /= len(trn_loader)
@@ -111,29 +123,42 @@ def numpy_metrics(y_pred, y_true, n_classes = 11, void_labels=[11]):
     accuracy = np.sum(I) / np.sum(not_void)
     return I, U, accuracy
 
-def test(model, test_loader, criterion, num_classes = 11):
+def test(model, test_loader, criterion, num_classes = 11, return_outputs = False):
     model.eval()
     with torch.no_grad():
         test_loss = 0
         test_error = 0
         I_tot = np.zeros(num_classes)
         U_tot = np.zeros(num_classes)
+
+        if return_outputs:
+            output_list = []
+            target_list = []
         
         for data, target in test_loader:
             data = data.cuda(non_blocking=True)
             target = target.cuda(non_blocking=True)
             output = model(data)
 
+            test_loss += masked_loss(output, target, criterion)
+
             I, U, acc = numpy_metrics(output.cpu().numpy(), target.cpu().numpy(), n_classes=11, void_labels=[11])
-            print(1-batch_error, acc) #should be the same
             I_tot += I
             U_tot += U
             test_error += (1 - acc)
 
+            if return_outputs:
+                output_list.append(output.cpu().numpy())
+                target_list.append(target.cpu().numpy())
+
         test_loss /= len(test_loader)
         test_error /= len(test_loader)
         m_jacc = np.mean(I_tot / U_tot)
-        return test_loss, test_error, m_jacc
+
+        if not return_outputs:
+            return test_loss, test_error, m_jacc
+        else:
+            return test_loss, test_error, m_jacc, {'outputs': output_list, 'targets': target_list}
 
 def adjust_learning_rate(lr, decay, optimizer, cur_epoch, n_epochs):
     """Sets the learning rate to the initially
@@ -170,3 +195,17 @@ def view_sample_predictions(model, loader, n):
         img_utils.view_image(inputs[i])
         img_utils.view_annotated(targets[i])
         img_utils.view_annotated(pred[i])
+
+
+def masked_loss(y_pred, y_true, criterion, void_class = 11.):
+    # masked version of crossentropy loss
+
+    el = torch.ones_like(y_true) * void_class
+    mask = torch.ne(y_true, el).long()
+
+    y_true_tmp = y_true * mask
+
+    loss = criterion(y_pred, y_true_tmp)
+    loss = mask.float() * loss
+
+    return loss.sum()/mask.sum()
