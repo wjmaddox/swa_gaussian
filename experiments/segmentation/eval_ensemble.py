@@ -14,7 +14,8 @@ from datasets import camvid
 from datasets import joint_transforms
 from utils.training import test
 
-from swag import data, losses, models, utils
+from swag.utils import bn_update
+from swag.losses import cross_entropy
 from swag.posteriors import SWAG, KFACLaplace
 
 parser = argparse.ArgumentParser(description='SGD/SWA training')
@@ -131,7 +132,7 @@ for i in range(args.N):
         if i==0:
             model.net.train()
 
-            loss, _ = losses.cross_entropy(model.net, t_input, t_target)
+            loss, _ = cross_entropy(model.net, t_input, t_target)
             loss.backward(create_graph = True)
             model.step(update_params = False)
 
@@ -141,7 +142,7 @@ for i in range(args.N):
             model.sample(scale=args.scale, cov=sample_with_cov)
 
     if 'SWAG' in args.method:
-        utils.bn_update(loaders['train'], model)
+        bn_update(loaders['train'], model)
         
     model.eval()
     if args.method in ['Dropout', 'SWAGDrop']:
@@ -160,7 +161,7 @@ for i in range(args.N):
                 output = model(input)
 
             batch_probs = F.softmax(output, dim=1).cpu().numpy()
-            print(batch_probs.min(), batch_probs.max())
+            #print(batch_probs.min(), batch_probs.max())
             
             predictions[k:k+input.size(0), :, :, :] += batch_probs
 
