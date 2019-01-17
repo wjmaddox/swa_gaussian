@@ -220,7 +220,7 @@ def predictions(test_loader, model, seed=None, cuda=True, regression=False, **kw
         if seed is not None:
             torch.manual_seed(seed)
         if cuda:
-            input = input.cuda(async=True)
+            input = input.cuda(non_blocking=True)
         output = model(input, **kwargs)
         if regression:
             preds.append(output.cpu().data.numpy())
