@@ -229,3 +229,14 @@ def predictions(test_loader, model, seed=None, cuda=True, regression=False, **kw
             preds.append(probs.cpu().data.numpy())
         targets.append(target.numpy())
     return np.vstack(preds), np.concatenate(targets)
+
+def schedule(epoch, lr_init, epochs, swa, swa_start=None, swa_lr=None):
+    t = (epoch) / (swa_start if swa else epochs)
+    lr_ratio = swa_lr / lr_init if swa else 0.01
+    if t <= 0.5:
+        factor = 1.0
+    elif t <= 0.9:
+        factor = 1.0 - (1.0 - lr_ratio) * (t - 0.5) / 0.4
+    else:
+        factor = lr_ratio
+    return lr_init * factor

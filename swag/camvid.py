@@ -4,6 +4,7 @@ import torch.utils.data as data
 import numpy as np
 from PIL import Image
 from torchvision.datasets.folder import default_loader
+from pathlib import Path
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']
 # The following two functions are copied from https://github.com/pytorch/vision/blob/master/torchvision/datasets/folder.py
@@ -110,7 +111,8 @@ class CamVid(data.Dataset):
                  transform=None, target_transform=LabelToLongTensor(),
                  download=False,
                  loader=default_loader):
-        self.root = root
+        self.root = Path(root)
+        
         assert split in ('train', 'val', 'test')
         self.split = split
         self.transform = transform
