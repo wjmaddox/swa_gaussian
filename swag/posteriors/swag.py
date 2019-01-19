@@ -114,18 +114,18 @@ class SWAG(torch.nn.Module):
             mean_list.append( mean )
             sq_mean_list.append( sq_mean )
 
-        mean = flatten(mean_list)
-        sq_mean = flatten(sq_mean_list)
+        mean = flatten(mean_list).cpu()
+        sq_mean = flatten(sq_mean_list).cpu()
 
         # draw diagonal variance sample
         var = torch.clamp(sq_mean - mean ** 2, self.var_clamp)
-        var_sample = var.sqrt() * torch.randn_like(var)
+        var_sample = var.sqrt() * torch.randn_like(var, requires_grad = False)
 
         # if covariance draw low rank sample
         if cov:
-            cov_mat_sqrt = torch.cat(cov_mat_sqrt_list, dim=1)
+            cov_mat_sqrt = torch.cat(cov_mat_sqrt_list, dim=1).cpu()
 
-            cov_sample = cov_mat_sqrt.t().matmul(cov_mat_sqrt.new_empty((cov_mat_sqrt.size(0),)).normal_())
+            cov_sample = cov_mat_sqrt.t().matmul(cov_mat_sqrt.new_empty((cov_mat_sqrt.size(0),), requires_grad=False).normal_())
             cov_sample /= ((self.max_num_models-1)**0.5) 
 
             rand_sample = var_sample + cov_sample
@@ -141,7 +141,7 @@ class SWAG(torch.nn.Module):
 
 
         for (module, name), sample in zip(self.params, samples_list):
-            module.__setattr__(name, sample)
+            module.__setattr__(name, sample.cuda())
 
     def collect_model(self, base_model):
         for (module, name), base_param in zip(self.params, base_model.parameters()):
