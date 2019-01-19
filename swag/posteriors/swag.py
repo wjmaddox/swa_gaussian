@@ -25,7 +25,7 @@ def unflatten_like(vector, likeTensorList):
 def swag_parameters(module, params, no_cov_mat=True, num_models=0):
     for name in list(module._parameters.keys()):
         if module._parameters[name] is None:
-            print(module, name)
+            # print(module, name)
             continue
         data = module._parameters[name].data
         module._parameters.pop(name)
