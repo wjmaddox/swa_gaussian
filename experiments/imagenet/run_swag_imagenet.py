@@ -211,7 +211,7 @@ for epoch in range(start_epoch, args.epochs):
             utils.bn_update(loaders['train'], swag_model, verbose=True, subset=0.1)
             print('EPOCH %d. SWAG EVAL' % (epoch + 1))
             swag_res = utils.eval(loaders['test'], swag_model, criterion, verbose=True)
-            swag_model.to(args.swag_device)
+            swag_model.to(args.swa_device)
         else:
             swag_res = {'loss': None, 'accuracy': None}
 
