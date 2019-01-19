@@ -3,18 +3,47 @@ import torch
 import torch.utils.data as data
 import numpy as np
 from PIL import Image
-from torchvision.datasets.folder import is_image_file, default_loader
+from torchvision.datasets.folder import default_loader
+from pathlib import Path
 
+IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']
+# The following two functions are copied from https://github.com/pytorch/vision/blob/master/torchvision/datasets/folder.py
+def has_file_allowed_extension(filename, extensions):
+    """Checks if a file is an allowed extension.
+    Args:
+        filename (string): path to a file
+        extensions (iterable of strings): extensions to consider (lowercase)
+    Returns:
+        bool: True if the filename ends with one of given extensions
+    """
+    filename_lower = filename.lower()
+    return any(filename_lower.endswith(ext) for ext in extensions)
+
+
+def is_image_file(filename):
+    """Checks if a file is an allowed image extension.
+    Args:
+        filename (string): path to a file
+    Returns:
+        bool: True if the filename ends with a known image extension
+    """
+    return has_file_allowed_extension(filename, IMG_EXTENSIONS)
 
 classes = ['Sky', 'Building', 'Column-Pole', 'Road',
            'Sidewalk', 'Tree', 'Sign-Symbol', 'Fence', 'Car', 'Pedestrain',
            'Bicyclist', 'Void']
 
+# can't verify below?
 # https://github.com/yandex/segnet-torch/blob/master/datasets/camvid-gen.lua
-class_weight = torch.FloatTensor([
+""" class_weight = torch.FloatTensor([
     0.58872014284134, 0.51052379608154, 2.6966278553009,
     0.45021694898605, 1.1785038709641, 0.77028578519821, 2.4782588481903,
-    2.5273461341858, 1.0122526884079, 3.2375309467316, 4.1312313079834, 0])
+    2.5273461341858, 1.0122526884079, 3.2375309467316, 4.1312313079834, 0]) """
+class_weight = torch.FloatTensor([
+    1.0, 1.0, 1.0, 
+    1.0, 1.0, 1.0, 1.0,
+    1.0, 1.0, 1.0, 1.0, 0.0
+])
 
 mean = [0.41189489566336, 0.4251328133025, 0.4326707089857]
 std = [0.27413549931506, 0.28506257482912, 0.28284674400252]
@@ -82,7 +111,8 @@ class CamVid(data.Dataset):
                  transform=None, target_transform=LabelToLongTensor(),
                  download=False,
                  loader=default_loader):
-        self.root = root
+        self.root = Path(root)
+        
         assert split in ('train', 'val', 'test')
         self.split = split
         self.transform = transform

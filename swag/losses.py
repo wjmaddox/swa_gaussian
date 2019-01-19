@@ -50,4 +50,54 @@ def adversarial_cross_entropy(model, input, target, lossfn = F.cross_entropy, ep
     #return mean of loss for reasonable scalings
     return (loss + adv_loss)/2.0, output
 
+def masked_loss(y_pred, y_true, void_class = 11., weight=None, reduce = True):
+    # masked version of crossentropy loss
 
+    el = torch.ones_like(y_true) * void_class
+    mask = torch.ne(y_true, el).long()
+
+    y_true_tmp = y_true * mask
+
+    loss = F.cross_entropy(y_pred, y_true_tmp, weight=weight, reduction='none')
+    loss = mask.float() * loss
+
+    if reduce:
+        return loss.sum()/mask.sum()
+    else:
+        return loss, mask
+
+def seg_cross_entropy(model, input, target, weight = None):
+    """weights = torch.FloatTensor([
+    0.58872014284134, 0.51052379608154, 2.6966278553009,
+    0.45021694898605, 1.1785038709641, 0.77028578519821, 2.4782588481903,
+    2.5273461341858, 1.0122526884079, 3.2375309467316, 4.1312313079834]).cuda()"""
+    #todo: implement weights
+    #criterion = torch.nn.NLLLoss(weight=weights, reduction='none')
+
+
+    output = model(input)
+
+    # use masked loss function
+    loss = masked_loss(output, target, weight=weight)
+
+    return loss, output
+
+def seg_ale_cross_entropy(model, input, target, num_samples = 50, weight = None):
+        #requires two outputs for model(input)
+
+        output = model(input)
+        mean = output[:, 0, :, :, :]
+        scale = output[:, 1, :, :, :].abs()
+
+        output_distribution = torch.distributions.Normal(mean, scale)
+
+        total_loss = 0
+
+        for _ in range(num_samples):
+                sample = output_distribution.rsample()
+
+                current_loss, mask = masked_loss(sample, target, weight=weight, reduce=False)
+                total_loss = total_loss + current_loss.exp()
+        mean_loss = total_loss / num_samples
+
+        return mean_loss.log().sum() / mask.sum(), mean    
