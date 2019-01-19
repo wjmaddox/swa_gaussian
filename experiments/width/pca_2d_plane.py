@@ -4,13 +4,15 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import sklearn.decomposition
+import tabulate
+import time
 
 os.sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../'))
 
 from swag import data, models, utils, losses
 from swag.posteriors import SWAG
 
-parser = argparse.ArgumentParser(description='Width along PCA directions')
+parser = argparse.ArgumentParser(description='PCA plane')
 
 parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset name (default: CIFAR10)')
 parser.add_argument('--data_path', type=str, default='/scratch/datasets/', metavar='PATH',
@@ -24,9 +26,10 @@ parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
 parser.add_argument('--checkpoint', action='append')
 parser.add_argument('--save_path', type=str, default=None, required=True, help='path to npz results file')
 
-parser.add_argument('--K', type=int, default=7, metavar='K', help='number of random rays (default: 7)')
-parser.add_argument('--dist', type=float, default=60.0, metavar='D', help='dist to travel along a direction (default: 60.0)')
-parser.add_argument('--N', type=int, default=31, metavar='N', help='number of points on a grid (default: 31)')
+parser.add_argument('--dist', type=float, default=30.0, metavar='D', help='dist to travel along a direction (default: 30.0)')
+parser.add_argument('--N', type=int, default=21, metavar='N', help='number of points on a grid (default: 31)')
+parser.add_argument('--PC1', type=int, default=0, metavar='PC1', help='index of the first principal axis (default: 0)')
+parser.add_argument('--PC2', type=int, default=1, metavar='PC2', help='index of the second principal axis (default: 1)')
 
 
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
@@ -74,33 +77,35 @@ for path in args.checkpoint:
 W = np.array(W)
 print('Shape: %d %d' % (W.shape[0], W.shape[1]))
 
-pca = sklearn.decomposition.PCA(n_components=W.shape[0])
+pca = sklearn.decomposition.PCA(n_components=num_checkpoints)
 pca.fit(W)
 print(pca.explained_variance_ratio_ * 100.0)
 
 
+xs = np.linspace(-args.dist, args.dist, args.N)
+ys = np.linspace(-args.dist, args.dist, args.N)
 
-ts = np.linspace(-args.dist, args.dist, args.N)
 
-
-train_acc = np.zeros((args.K, args.N))
-train_loss = np.zeros((args.K, args.N))
-test_acc = np.zeros((args.K, args.N))
-test_loss = np.zeros((args.K, args.N))
+train_acc = np.zeros((args.N, args.N))
+train_loss = np.zeros((args.N, args.N))
+test_acc = np.zeros((args.N, args.N))
+test_loss = np.zeros((args.N, args.N))
 
 mean = pca.mean_
-for i in range(args.K):
-    print('Ray %d/%d' % (i + 1, args.K))
-    v = np.random.normal(size=W.shape[1])
-    v /= np.linalg.norm(v)
-    for j in range(pca.components_.shape[0]):
-        g = pca.components_[j, :].copy()
-        g /= np.linalg.norm(g)
-        v -= g * np.sum(g * v)
-        v /= np.linalg.norm(v)
-    for j, t in enumerate(ts):
-        print('t: %.2f' % t)
-        w = mean + t * v
+u = pca.components_[args.PC1, :].copy()
+u /= np.linalg.norm(u)
+v = pca.components_[args.PC2, :].copy()
+v /= np.linalg.norm(v)
+
+M = np.vstack((u[None, :], v[None, :]))
+trajectory_projection = np.dot(M, (W - mean[None, :]).T)
+
+columns = ['x', 'y', 'tr_loss', 'tr_acc', 'te_loss', 'te_acc', 'time']
+
+for i, x in enumerate(xs):
+    for j, y in enumerate(ys):
+        t_start = time.time()
+        w = mean + x * u + y * v
 
         offset = 0
         for param in model.parameters():
@@ -108,28 +113,36 @@ for i in range(args.K):
             param.data.copy_(param.new_tensor(w[offset:offset+size].reshape(param.size())))
             offset += size
 
-        print('BN')
         utils.bn_update(loaders['train'], model)
-        print('Train')
         train_res = utils.eval(loaders['train'], model, criterion)
-        print(train_res)
-        print('Test')
         test_res = utils.eval(loaders['test'], model, criterion)
-        print(test_res)
 
         train_acc[i, j] = train_res['accuracy']
         train_loss[i, j] = train_res['loss']
         test_acc[i, j] = test_res['accuracy']
         test_loss[i, j] = test_res['loss']
 
+        t = time.time() - t_start
+        values = [x, y, train_loss[i, j], train_acc[i, j], test_loss[i, j], test_acc[i, j], t]
+        table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
+        if j == 0:
+            table = table.split('\n')
+            table = '\n'.join([table[1]] + table)
+        else:
+            table = table.split('\n')[2]
+        print(table)
+
 np.savez(
     args.save_path,
     N=num_checkpoints,
     dim=W.shape[1],
-    K=args.K,
-    ts=ts,
     explained_variance=pca.explained_variance_,
     explained_variance_ratio=pca.explained_variance_ratio_,
+    pc1_id=args.PC1,
+    pc2_id=args.PC2,
+    trajectory_projection=trajectory_projection,
+    xs=xs,
+    ys=ys,
     train_acc=train_acc,
     train_err=100.0 - train_acc,
     train_loss=train_loss,

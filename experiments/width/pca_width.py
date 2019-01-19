@@ -115,7 +115,7 @@ for i, id in enumerate(pc_idx):
 
         train_acc[i, j] = train_res['accuracy']
         train_loss[i, j] = train_res['loss']
-        test_acc[i, j] = train_res['accuracy']
+        test_acc[i, j] = test_res['accuracy']
         test_loss[i, j] = test_res['loss']
 
 np.savez(
