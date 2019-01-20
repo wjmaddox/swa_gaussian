@@ -88,15 +88,18 @@ cov_mat = np.hstack([mat.reshape(args.swag_rank, -1) for mat in cov_mat_list])
 tsvd = sklearn.decomposition.TruncatedSVD(n_components=args.swag_rank, n_iter=7)
 tsvd.fit(cov_mat)
 print(tsvd.components_.shape)
-print(np.diag(np.dot(np.dot(tsvd.components_, cov_mat.T), np.dot(cov_mat, tsvd.components_.T))))
+print(np.diag(np.dot(np.dot(tsvd.components_, cov_mat.T), np.dot(cov_mat, tsvd.components_.T))) / (cov_mat.shape[0] - 1))
 print(tsvd.explained_variance_)
 print(tsvd.explained_variance_ratio_ * 100.0)
 
-pc_idx = [0, 1, args.swag_rank // 2, args.swag_rank - 2, args.swag_rank - 1] if args.swag_rank > 4 else list(range(args.swag_rank))
+component_variances = np.dot(np.dot(tsvd.components_, cov_mat.T), np.dot(cov_mat, tsvd.components_.T)) / (cov_mat.shape[0] - 1)
+
+pc_idx = [0, 1, 2, 3, 4, args.swag_rank // 2 - 1, args.swag_rank // 2, args.swag_rank // 2 + 1, args.swag_rank - 2, args.swag_rank - 1]
+pc_idx = np.sort(np.unique(np.minimum(pc_idx, args.swag_rank - 1)))
+print(pc_idx)
 K = len(pc_idx)
 
 ts = np.linspace(-args.dist, args.dist, args.N)
-
 
 train_acc = np.zeros((K, args.N))
 train_loss = np.zeros((K, args.N))
@@ -145,6 +148,7 @@ np.savez(
     train_loss=train_loss,
     test_acc=test_acc,
     test_err=100.0 - test_acc,
-    test_loss=test_loss
+    test_loss=test_loss,
+    component_variances=component_variances
 )
 

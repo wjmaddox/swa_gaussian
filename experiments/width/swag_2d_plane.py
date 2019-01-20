@@ -84,19 +84,15 @@ for path in args.checkpoint:
 W = np.array(W)
 print('Shape: %d %d' % (W.shape[0], W.shape[1]))
 
-mean, _, cov_mat_list = swag_model.export_numpy_params(export_cov_mat=True)
+mean, variances, cov_mat_list = swag_model.export_numpy_params(export_cov_mat=True)
 cov_mat = np.hstack([mat.reshape(args.swag_rank, -1) for mat in cov_mat_list])
 
 tsvd = sklearn.decomposition.TruncatedSVD(n_components=args.swag_rank, n_iter=7)
 tsvd.fit(cov_mat)
 print(tsvd.components_.shape)
-print(np.diag(np.dot(np.dot(tsvd.components_, cov_mat.T), np.dot(cov_mat, tsvd.components_.T))))
+print(np.diag(np.dot(np.dot(tsvd.components_, cov_mat.T), np.dot(cov_mat, tsvd.components_.T))) / (cov_mat.shape[0] - 1))
 print(tsvd.explained_variance_)
 print(tsvd.explained_variance_ratio_ * 100.0)
-
-xs = np.linspace(-args.dist, args.dist, args.N)
-ys = np.linspace(-args.dist, args.dist, args.N)
-
 
 train_acc = np.zeros((args.N, args.N))
 train_loss = np.zeros((args.N, args.N))
@@ -108,8 +104,33 @@ u /= np.linalg.norm(u)
 v = tsvd.components_[args.PC2, :].copy()
 v /= np.linalg.norm(v)
 
+ex_diag = np.sum(u * variances * u)
+ey_diag = np.sum(v * variances * v)
+exy_diag = np.sum(u * variances * v)
+print(ex_diag, ey_diag, exy_diag)
+E_diag = np.array([[ex_diag, exy_diag], [exy_diag, ey_diag]])
+
+ex = ex_diag + np.sum(np.square(np.dot(cov_mat, u))) / (cov_mat.shape[0] - 1)
+ey = ey_diag + np.sum(np.square(np.dot(cov_mat, v))) / (cov_mat.shape[0] - 1)
+exy = exy_diag + np.sum(np.dot(cov_mat, u) * np.dot(cov_mat, v)) / (cov_mat.shape[0] - 1)
+E_cov = np.array([[ex, exy], [exy, ey]])
+
+dist_x = max(args.dist, 3.4 * np.sqrt(ex))
+dist_y = max(args.dist, 3.4 * np.sqrt(ey))
+dist = max(dist_x, dist_y)
+print(dist, dist_x, dist_y)
+
+component_variances = np.dot(np.dot(tsvd.components_, cov_mat.T), np.dot(cov_mat, tsvd.components_.T)) / (cov_mat.shape[0] - 1)
+
 M = np.vstack((u[None, :], v[None, :]))
-trajectory_projection = np.dot(M, (W - mean[None, :]).T)
+W_dev = (W - np.mean(W, axis=0, keepdims=True))
+trajectory_projection = np.dot(M, W_dev.T)
+
+trajectory_full_variance = np.sum(np.sum(np.square(W_dev), axis=1)) / (W.shape[0] - 1)
+trajectory_exp_variance = np.dot(np.dot(tsvd.components_, W_dev.T), np.dot(W_dev, tsvd.components_.T)) / (W.shape[0] - 1)
+
+xs = np.linspace(-dist, dist, args.N)
+ys = np.linspace(-dist, dist, args.N)
 
 columns = ['x', 'y', 'tr_loss', 'tr_acc', 'te_loss', 'te_acc', 'time']
 
@@ -159,6 +180,11 @@ np.savez(
     train_loss=train_loss,
     test_acc=test_acc,
     test_err=100.0 - test_acc,
-    test_loss=test_loss
+    test_loss=test_loss,
+    E_diag=E_diag,
+    E_cov=E_cov,
+    component_variances=component_variances,
+    trajectory_full_variance=trajectory_full_variance,
+    trajectory_exp_variance=trajectory_exp_variance,
 )
 
