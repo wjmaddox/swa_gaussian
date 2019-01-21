@@ -6,9 +6,10 @@ import tabulate
 import torch
 import torch.nn.functional as F
 import torchvision
+import numpy as np
 
-os.sys.path.append("/home/pi49/projects/private_swa_uncertainties")
-os.sys.path.append("/home/izmailovpavel/Documents/Projects/private_swa_uncertainties")
+os.sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../'))
+
 from swag import data, models, utils, losses
 from swag.posteriors import SWAG
 
@@ -154,6 +155,10 @@ utils.save_checkpoint(
     optimizer=optimizer.state_dict()
 )
 
+sgd_ens_preds = None
+sgd_targets = None
+n_ensembled = 0.
+
 for epoch in range(start_epoch, args.epochs):
     time_ep = time.time()
 
@@ -174,6 +179,17 @@ for epoch in range(start_epoch, args.epochs):
         test_res = {'loss': None, 'accuracy': None}
 
     if args.swa and (epoch + 1) > args.swa_start and (epoch + 1 - args.swa_start) % args.swa_c_epochs == 0:
+        #sgd_preds, sgd_targets = utils.predictions(loaders["test"], model)
+        sgd_res = utils.predict(loaders["test"], model)
+        sgd_preds = sgd_res["predictions"]
+        sgd_targets = sgd_res["targets"]
+        print("updating sgd_ens")
+        if sgd_ens_preds is None:
+            sgd_ens_preds = sgd_preds.copy()
+        else:
+            #TODO: rewrite in a numerically stable way
+            sgd_ens_preds = sgd_ens_preds * n_ensembled / (n_ensembled + 1) + sgd_preds/ (n_ensembled + 1)
+        n_ensembled += 1
         swag_model.collect_model(model)
         if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
             swag_model.sample(0.0)
@@ -224,3 +240,6 @@ if args.epochs % args.save_freq != 0:
             name='swag',
             state_dict=swag_model.state_dict(),
         )
+
+if args.swa:
+    np.savez(os.path.join(args.dir, "sgd_ens_preds.npz"), predictions=sgd_ens_preds, targets=sgd_targets)

@@ -124,10 +124,13 @@ class KFACLaplace(torch.optim.Optimizer):
                 # draw samples from AZB
                 # appendix B of ritter et al.
                 z = torch.randn(state['ixxt'].size(0), state['iggt'].size(0), device = ixxt.device, dtype = ixxt.dtype)
+                #z = torch.randn(state['ixxt'].size(0), state['iggt'].size(0), dtype = ixxt.dtype)
                 # matmul a z b
                 #print(state['ixxt'].shape, state['iggt'].shape)
                 sample = ixxt_chol.matmul(z.matmul(iggt_chol)).t()
+                #sample = ixxt_chol.cpu().matmul(z.matmul(iggt_chol.cpu())).t()
                 sample *= (scale/self.data_size) #scale/N term for inverse
+                #sample = sample.cuda()
 
                 if bias is not None:
                     #print(weight.shape, bias.shape, sample.shape)
@@ -145,7 +148,7 @@ class KFACLaplace(torch.optim.Optimizer):
         #Performs one step of preconditioning.
         fisher_norm = 0.
         for group in self.param_groups:
-            print(torch.cuda.memory_allocated()/(1024**3))
+            #print(torch.cuda.memory_allocated()/(1024**3))
             # Getting parameters
             if len(group['params']) == 2:
                 weight, bias = group['params']
@@ -154,7 +157,7 @@ class KFACLaplace(torch.optim.Optimizer):
                 bias = None
             state = self.state[weight]
 
-            print(group['layer_type'])
+            #print(group['layer_type'])
             if 'BatchNorm' in group['layer_type'] and self.use_batch_norm:
                 # now compute hessian of weights
                 diag_comp = 100 * weight.size(0) * self.eps * torch.eye(weight.size(0), device = weight.device, dtype = weight.dtype)

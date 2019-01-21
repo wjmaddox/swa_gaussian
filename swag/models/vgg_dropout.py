@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 
 __all__ = ['VGG16Drop', 'VGG16BNDrop', 'VGG19Drop', 'VGG19BNDrop']
 
-P = 0.01
+P = 0.05
 
 
 def make_layers(cfg, batch_norm=False):
