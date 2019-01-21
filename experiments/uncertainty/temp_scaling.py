@@ -10,11 +10,10 @@ import numpy as np
 def logits_from_probs(prob_arr):
     return np.log(prob_arr)
 
-
 def optimal_temp_scale(probs_arr, labels_arr, lr=0.01, max_iter=50):
     probs = torch.from_numpy(probs_arr).float()
     labels = torch.from_numpy(labels_arr.astype(int))
-    logits = torch.log(probs)
+    logits = torch.log(probs + 1e-12)
     nll_criterion = nn.CrossEntropyLoss()
     
     before_temperature_nll = nll_criterion(logits, labels).item()
@@ -25,12 +24,13 @@ def optimal_temp_scale(probs_arr, labels_arr, lr=0.01, max_iter=50):
     optimizer = optim.LBFGS([T], lr=lr, max_iter=max_iter)
     def eval():
         loss = nll_criterion(logits / T, labels)
-        loss.backward()
+        loss.backward(retain_graph=True)
         return loss
+
     optimizer.step(eval)
     
     after_temperature_nll = nll_criterion(logits / T, labels).item()
-    print('After temperature - NLL: %.3f' % (after_temperature_nll))
+    print('After temperature - NLL: %.3f' % (after_temperature_nll), ", Temperature:", T)
     
     return T.item(), F.softmax(logits / T).data.numpy()
 
