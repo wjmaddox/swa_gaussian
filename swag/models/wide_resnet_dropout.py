@@ -11,7 +11,7 @@ import math
 
 __all__ = ['WideResNet28x10Drop']
 
-P = 0.01
+P = 0.05
 
 def conv3x3(in_planes, out_planes, stride=1):
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=True)
@@ -98,12 +98,14 @@ class WideResNet28x10Drop:
     args = list()
     kwargs = {'depth': 28, 'widen_factor': 10}
     transform_train = transforms.Compose([
+        transforms.Resize(32),
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ])
     transform_test = transforms.Compose([
+        transforms.Resize(32),
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ])
