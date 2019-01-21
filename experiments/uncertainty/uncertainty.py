@@ -31,6 +31,13 @@ parser.add_argument('--use_diag', action='store_true', help = 'use diag cov for 
 
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 
+def nll(outputs, labels):
+    labels = labels.astype(int)
+    idx = (np.arange(labels.size), labels)
+    ps = outputs[idx]
+    nll = -np.sum(np.log(ps))
+    return nll
+
 args = parser.parse_args()
 
 eps = 1e-12
@@ -139,14 +146,9 @@ for i in range(args.N):
         targets[k:(k+target.size(0))] = target.numpy()
         k += input.size()[0]
 
-    print(np.mean(np.argmax(predictions, axis=1) == targets))
+    print(np.mean(np.argmax(predictions, axis=1) == targets), nll(predictions / (i+1), targets))
 predictions /= args.N
 
 entropies = -np.sum(np.log(predictions + eps) * predictions, axis=1)
 np.savez(args.save_path, entropies=entropies, predictions=predictions, targets=targets)
-
-
-
-
-
 
