@@ -1,21 +1,23 @@
-import argparse
-import torch
-import torch.nn.functional as F
-import torchvision
-import torchvision.transforms as transforms
+import time
+from pathlib import Path
 import numpy as np
-import os
+#import matplotlib.pyplot as plt
+import os, sys
+import argparse
 import tqdm
 
-from pathlib import Path
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torchvision
+import torchvision.transforms as transforms
+import torch.nn.functional as F
 
-from models import tiramisu
-from datasets import camvid
-from datasets import joint_transforms
+from swag.models import tiramisu
+from swag import data, losses, models
 from utils.training import test
 
-from swag.utils import bn_update
-from swag.losses import cross_entropy
+from swag.utils import adjust_learning_rate, bn_update
 from swag.posteriors import SWAG, KFACLaplace
 
 parser = argparse.ArgumentParser(description='SGD/SWA training')
@@ -25,7 +27,6 @@ parser.add_argument('--data_path', type=str, default='/home/wesley/Documents/Cod
                     help='path to datasets location (default: None)')
 parser.add_argument('--use_test', dest='use_test', action='store_true', help='use test dataset instead of validation (default: False)')
 parser.add_argument('--batch_size', type=int, default=1, metavar='N', help='input batch size (default: 5)')
-parser.add_argument('--split_classes', type=int, default=None)
 parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
 parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'KFACLaplace', 'SGD', 'HomoNoise', 'Dropout', 'SWAGDrop'], required=True)
 parser.add_argument('--save_path', type=str, default=None, required=True, help='path to npz results file')
@@ -35,6 +36,7 @@ parser.add_argument('--cov_mat', action='store_true', help = 'use sample covaria
 parser.add_argument('--use_diag', action='store_true', help = 'use diag cov for swag')
 
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
+parser.add_argument('--loss', type=str, choices=['cross_entropy', 'aleatoric'], default='cross_entropy')
 
 args = parser.parse_args()
 
@@ -48,50 +50,25 @@ torch.backends.cudnn.benchmark = True
 torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
 
-CAMVID_PATH = Path(args.data_path)
-normalize = transforms.Normalize(mean=camvid.mean, std=camvid.std)
-# fine-tuning does not include random crops
-train_joint_transformer = transforms.Compose([
-    joint_transforms.JointRandomHorizontalFlip()
-    ])
-train_dset = camvid.CamVid(CAMVID_PATH, 'train',
-      joint_transform=train_joint_transformer,
-      transform=transforms.Compose([
-          transforms.ToTensor(),
-          normalize,
-    ]))
-train_loader = torch.utils.data.DataLoader(
-    train_dset, batch_size=3, shuffle=True)
+model_cfg = getattr(models, 'FCDenseNet67')
+loaders, num_classes = data.loaders('CamVid', args.data_path, args.batch_size, args.num_workers, ft_batch_size=1, 
+                    transform_train=model_cfg.transform_train, transform_test=model_cfg.transform_test, 
+                    joint_transform=model_cfg.joint_transform, ft_joint_transform=model_cfg.ft_joint_transform,
+                    )
 
-if args.use_test:
-    print('Warning: using test dataset')
-    test_dset = camvid.CamVid(
-        CAMVID_PATH, 'test', joint_transform=None,
-        transform=transforms.Compose([
-            transforms.ToTensor(),
-            normalize
-        ]))
+if args.loss == 'cross_entropy':
+    criterion = losses.seg_cross_entropy
 else:
-    print('Using validation dataset')
-    test_dset = camvid.CamVid(
-        CAMVID_PATH, 'val', joint_transform=None,
-        transform=transforms.Compose([
-            transforms.ToTensor(),
-            normalize
-        ]))
-
-test_loader = torch.utils.data.DataLoader(
-    test_dset, batch_size=args.batch_size, shuffle=False)
-loaders = {'train': train_loader, 'test': test_loader}
-
-
+    criterion = losses.seg_ale_cross_entropy
 
 print('Preparing model')
 if args.method in ['SWAG', 'HomoNoise', 'SWAGDrop']:
-    model = SWAG(tiramisu.FCDenseNet67, no_cov_mat=not args.cov_mat, max_num_models = 20, loading = True, n_classes=11)
+    model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20, loading=True, 
+                num_classes=num_classes, use_aleatoric=args.loss=='aleatoric')
+
 elif args.method in ['SGD', 'Dropout', 'KFACLaplace']:
     # construct and load model
-    model = tiramisu.FCDenseNet67(n_classes=11)
+    model = model_cfg.base(num_classes=num_classes, use_aleatoric=args.loss=='aleatoric')
 else:
     assert False
 model.cuda()
@@ -118,23 +95,13 @@ if args.method == 'HomoNoise':
         mean = module.__getattr__('%s_mean' % name)
         module.__getattr__('%s_sq_mean' % name).copy_(mean**2 + std**2)
                             
-predictions = np.zeros((len(test_dset), 11, 360, 480))
-targets = np.zeros((len(test_dset), 360, 480))
+predictions = np.zeros((len(loaders['test'].dataset), 11, 360, 480))
+targets = np.zeros((len(loaders['test'].dataset), 360, 480))
 #predictions_list = []
 print(targets.size)
 
 for i in range(args.N):
     print('%d/%d' % (i + 1, args.N))
-    if args.method == 'KFACLaplace':
-        ## KFAC Laplace needs one forwards pass to load the KFAC model at the beginning
-        model.net.load_state_dict(model.mean_state)
-
-        if i==0:
-            model.net.train()
-
-            loss, _ = cross_entropy(model.net, t_input, t_target)
-            loss.backward(create_graph = True)
-            model.step(update_params = False)
 
     if args.method not in ['SGD', 'Dropout']:
         sample_with_cov = args.cov_mat and not args.use_diag
@@ -176,8 +143,8 @@ for i in range(args.N):
     print(np.mean(np.argmax(predictions, axis=1) == targets))
 predictions /= args.N
 
-entropies = -np.sum(np.log(predictions + eps) * predictions, axis=1)
-np.savez(args.save_path, entropies=entropies, predictions=predictions, targets=targets)
+#entropies = -np.sum(np.log(predictions + eps) * predictions, axis=1)
+np.savez(args.save_path, predictions=predictions, targets=targets)
 
 
 

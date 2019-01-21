@@ -109,13 +109,13 @@ class SWAG(torch.nn.Module):
 
             if cov:
                 cov_mat_sqrt = module.__getattr__('%s_cov_mat_sqrt' % name)
-                cov_mat_sqrt_list.append( cov_mat_sqrt )
+                cov_mat_sqrt_list.append( cov_mat_sqrt.cpu() )
 
-            mean_list.append( mean )
-            sq_mean_list.append( sq_mean )
+            mean_list.append( mean.cpu() )
+            sq_mean_list.append( sq_mean.cpu() )
 
-        mean = flatten(mean_list).cpu()
-        sq_mean = flatten(sq_mean_list).cpu()
+        mean = flatten(mean_list)
+        sq_mean = flatten(sq_mean_list)
 
         # draw diagonal variance sample
         var = torch.clamp(sq_mean - mean ** 2, self.var_clamp)
@@ -123,7 +123,7 @@ class SWAG(torch.nn.Module):
 
         # if covariance draw low rank sample
         if cov:
-            cov_mat_sqrt = torch.cat(cov_mat_sqrt_list, dim=1).cpu()
+            cov_mat_sqrt = torch.cat(cov_mat_sqrt_list, dim=1)
 
             cov_sample = cov_mat_sqrt.t().matmul(cov_mat_sqrt.new_empty((cov_mat_sqrt.size(0),), requires_grad=False).normal_())
             cov_sample /= ((self.max_num_models-1)**0.5) 

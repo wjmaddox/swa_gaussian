@@ -9,7 +9,6 @@ import torch.nn.functional as F
 from itertools import chain, product
 
 from swag import data, losses, models, utils
-from swag.posteriors.utils import find_models, eval_ecdf
 
 parser = argparse.ArgumentParser(description='SGD/SWA/SWAG ensembling')
 #parser.add_argument('--replications', type=int, default=10, help='number of passes through testing set')
@@ -39,6 +38,26 @@ args = parser.parse_args()
 torch.backends.cudnn.benchmark = True
 torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
+
+def find_models(dir, model_name='checkpoint', start_epoch=161, finish_epoch=325):
+
+    all_models = os.popen('ls ' + dir + '/'+model_name+'*.pt').read().split('\n')
+    model_epochs = [int(t.replace('.', '-').split('-')[1]) for t in all_models[:-1]]
+    models_to_use = [t >= start_epoch and t <= finish_epoch for t in model_epochs]
+
+    model_names = list()
+    for model_name, use in zip(all_models, models_to_use):
+        if use:
+            model_names.append(model_name)
+
+    return model_names
+
+def nll(outputs, labels):
+    labels = labels.astype(int)
+    idx = (np.arange(labels.size), labels)
+    ps = outputs[idx]
+    nll = -np.sum(np.log(ps))
+    return nll
 
 print('Using model %s' % args.model)
 model_cfg = getattr(models, args.model)
@@ -76,74 +95,63 @@ print('using cross-entropy loss')
 #criterion = F.cross_entropy
 criterion = losses.cross_entropy
 
-#functions are now in swag.posteriors.utils
+dir_locs = []
+for dir in args.dir:
+    dir_locs.append( find_models(dir, model_name='checkpoint', start_epoch=args.epoch, finish_epoch=1000) )
+flatten = lambda l: [item for sublist in l for item in sublist]
+dir_locs = flatten(dir_locs)
+        
+columns = ['model', 'epoch', 'acc', 'loss', 'swa_acc', 'swa_loss']
 
-##compute point estimates for last sgd predictions
-if True:
-    columns = ['model', 'epoch', 'acc', 'acc_var', 'loss', 'loss_var']
-
-    pt_loss, pt_accuracy = list(), list()
-
-    epoch = None
-    for dir in args.dir:
-        dir_locs = find_models(dir, args.epoch)
-        model.load_state_dict(torch.load(dir_locs[-1])['state_dict'])
-        epoch = int(dir_locs[-1].replace('.', '-').split('-')[1])
-        res = utils.eval(loaders['test'], model, criterion)
-        pt_loss.append(res['loss'])
-        pt_accuracy.append(res['accuracy'])
-
-    values = [args.model, epoch, np.mean(pt_accuracy), np.var(pt_accuracy), np.mean(pt_loss), np.var(pt_loss)]
-    table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
-    print(table)
-
+pt_loss, pt_accuracy = list(), list()
 
 if not args.no_ensembles:
-    ensemble_loss = list()
-    ensemble_accuracy = list()
-
-    for dir in args.dir:
-        #print('now running ' + dir)
-        dir_locs = find_models(dir, args.epoch)
-
-    full_value_list = []
-    for i in range(len(dir_locs)):
-        res = eval_ecdf(loaders['test'], model, dir_locs[0:(i+1)])
-        ensemble_loss.append(res['loss'])
-        ensemble_accuracy.append(res['accuracy'])
-
-        columns = ['model', 'epoch', 'acc', 'acc_var', 'loss', 'loss_var']
-        values = [args.model, args.epoch+i, np.mean(ensemble_accuracy), np.var(ensemble_accuracy), np.mean(ensemble_loss), np.var(ensemble_loss)]
-        table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
-        print(table)
-        full_value_list.append(values)
-
-    np.savez(args.save_path, result=full_value_list)
-
-if not args.no_swa:
-    for dir in args.dir:
-        print('now running ' + dir)
-        dir_locs = find_models(dir, args.epoch)
-
-        print('SWAG training')
-        swag_model = swag.SWAG(model_cfg.base, no_cov_mat=False, max_num_models=29, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
-        swag_model.cuda()
-
-        for loc in dir_locs:
-            #one epoch of training for batch means
-            #model_batch_means, _ = utils.train_epoch(loaders['train'], model, criterion, optimizer, batch_means=True)
-
-            model.load_state_dict(torch.load(loc)['state_dict'])
-            swag_model.collect_model(model, bm=None)
-
-        #save checkpoint of swa model
-        utils.save_checkpoint(
-            dir,
-            300,
-            name=args.save_path,
-            state_dict=swag_model.state_dict(),
-        )
+    predictions = np.zeros((len(loaders['test'].dataset), num_classes, len(dir_locs)))
+    targets = np.zeros(len(loaders['test'].dataset))
 
 
+for i, ckpt in enumerate(dir_locs):
 
+    model.load_state_dict(torch.load(ckpt)['state_dict'])
+    epoch = int(ckpt.replace('.', '-').split('-')[1])
+    res = utils.eval(loaders['test'], model, criterion)
 
+    pt_loss.append(res['loss'])
+    pt_accuracy.append(res['accuracy'])
+
+    if not args.no_ensembles:
+        k=0
+        with torch.no_grad():
+            for input, target in tqdm.tqdm(loaders['test']):
+                input = input.cuda(non_blocking=True)
+                torch.manual_seed(1)
+
+                output = model(input)
+
+                predictions[k:k+input.size(0), :, i] += F.softmax(output, dim=1).cpu().numpy()
+                targets[k:(k+target.size(0))] = target.numpy()
+                k += input.size(0)
+
+        current_accuracy = np.mean(np.argmax(np.sum(predictions[:,:,0:(i+1)],2),1)==targets) * 100
+        #torch_mean_preds = torch.Tensor(np.sum(predictions[:,:,0:(i+1)],2)).float()
+        mean_preds = np.sum(predictions[:, :, 0:(i+1)],2)/(i+1)
+
+        current_loss = nll(mean_preds, targets) / targets.shape[0]
+
+        values = [args.model, epoch, pt_accuracy[-1], pt_loss[-1], current_accuracy, current_loss]
+
+    else:
+        values = [args.model, epoch, pt_accuracy[-1], pt_loss[-1], None, None]
+
+    table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
+    if i % 40 == 0:
+        table = table.split('\n')
+        table = '\n'.join([table[1]] + table)
+    else:
+        table = table.split('\n')[2]
+    print(table)
+
+if not args.no_ensembles:
+    np.savez(args.save_path, predictions=predictions, targets=targets, sgd_acc=pt_accuracy, sgd_loss=pt_loss)
+else:
+    np.savez(args.save_path, sgd_acc=pt_accuracy, sgd_loss=pt_loss)

@@ -59,7 +59,11 @@ parser.add_argument('--loss', type=str, choices=['cross_entropy', 'aleatoric'], 
 parser.add_argument('--use_weights', action='store_true', help='whether to use weighted loss')
 
 args = parser.parse_args()
-
+if torch.cuda.is_available():
+    args.device = torch.device('cuda')
+else:
+    args.device = torch.device('cpu')
+    
 torch.backends.cudnn.benchmark = True
 torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
@@ -117,14 +121,16 @@ if args.resume is not None:
 
 if args.swa:
     print('SWAG training')
-    swag_model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+    swag_model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20, *model_cfg.args, num_classes=num_classes, 
+                        use_aleatoric=args.loss=='aleatoric', **model_cfg.kwargs)
     swag_model.to(args.device)
 else:
     print('SGD training')
 
 if args.swa and args.swa_resume is not None:
     checkpoint = torch.load(args.swa_resume)
-    swag_model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20, loading=True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+    swag_model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20, loading=True, *model_cfg.args, 
+                        num_classes=num_classes, use_aleatoric=args.loss=='aleatoric', **model_cfg.kwargs)
     swag_model.to(args.device)
     swag_model.load_state_dict(checkpoint['state_dict'])
 
@@ -134,7 +140,7 @@ for epoch in range(start_epoch, args.epochs+1):
     ### Train ###
     if epoch == args.ft_start:
         print('Now replacing data loader with fine-tuned data loader.')
-        train_loader = loaders['ft_train']
+        train_loader = loaders['fine_tune']
 
     trn_loss, trn_err = train_utils.train(
         model, train_loader, optimizer, criterion)

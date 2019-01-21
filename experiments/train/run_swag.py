@@ -41,6 +41,7 @@ parser.add_argument('--swa_lr', type=float, default=0.02, metavar='LR', help='SW
 parser.add_argument('--swa_c_epochs', type=int, default=1, metavar='N',
                     help='SWA model collection frequency/cycle length in epochs (default: 1)')
 parser.add_argument('--cov_mat', action='store_true', help='save sample covariance')
+parser.add_argument('--max_num_models', type=int, default=20, help='maximum number of SWAG models to save')
 
 parser.add_argument('--swa_resume', type=str, default=None, metavar='CKPT',
                     help='checkpoint to restor SWA from (default: None)')
@@ -94,7 +95,8 @@ else:
     args.no_cov_mat = True
 if args.swa:
     print('SWAG training')
-    swag_model = SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models=20, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+    swag_model = SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models=args.max_num_models, 
+                    *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
     swag_model.to(args.device)
 else:
     print('SGD training')
@@ -135,7 +137,8 @@ if args.resume is not None:
 
 if args.swa and args.swa_resume is not None:
     checkpoint = torch.load(args.swa_resume)
-    swag_model = SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models=20, loading=True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+    swag_model = SWAG(model_cfg.base, no_cov_mat=args.no_cov_mat, max_num_models=args.max_num_models, 
+                    loading=True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
     swag_model.to(args.device)
     swag_model.load_state_dict(checkpoint['state_dict'])
 

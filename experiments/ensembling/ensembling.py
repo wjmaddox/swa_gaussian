@@ -31,6 +31,8 @@ parser.add_argument('--cov_mat', action='store_true', help = 'use sample covaria
 parser.add_argument('--use_diag', action='store_true', help = 'use diag cov for swag')
 
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
+parser.add_argument('--no_bn_update', action='store_true', help = 'to turn off the bn update code')
+parser.add_argument('--max_num_models', type=int, default=20, metavar='S', help='maximum rank of coavriance approximation (default: 20)')
 
 args = parser.parse_args()
 
@@ -63,7 +65,7 @@ loaders, num_classes = data.loaders(
 
 print('Preparing model')
 if args.method in ['SWAG', 'HomoNoise', 'SWAGDrop']:
-    model = SWAG(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models = 20, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+    model = SWAG(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models = args.max_num_models, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 elif args.method in ['SGD', 'Dropout', 'KFACLaplace']:
     model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 else:
@@ -114,7 +116,7 @@ for i in range(args.N):
         sample_with_cov = args.cov_mat and not args.use_diag
         model.sample(scale=args.scale, cov=sample_with_cov)
 
-    if 'SWAG' in args.method:
+    if 'SWAG' in args.method and not args.no_bn_update:
         utils.bn_update(loaders['train'], model)
         
     model.eval()

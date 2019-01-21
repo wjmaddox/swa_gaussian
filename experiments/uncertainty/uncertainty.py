@@ -3,8 +3,8 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import os
-os.sys.path.append("/home/pi49/projects/private_swa_uncertainties")
-os.sys.path.append("/home/izmailovpavel/Documents/Projects/private_swa_uncertainties/")
+#os.sys.path.append("/home/pi49/projects/private_swa_uncertainties")
+#os.sys.path.append("/home/izmailovpavel/Documents/Projects/private_swa_uncertainties/")
 import tqdm
 
 from swag import data, losses, models, utils
@@ -58,8 +58,10 @@ loaders, num_classes = data.loaders(
     split_classes=args.split_classes,
     shuffle_train=False
 )
-
-
+"""if args.split_classes is not None:
+    num_classes /= 2
+    num_classes = int(num_classes)"""
+    
 print('Preparing model')
 if args.method in ['SWAG', 'HomoNoise', 'SWAGDrop']:
     model = SWAG(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models = 20, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
