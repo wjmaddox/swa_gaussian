@@ -76,9 +76,13 @@ if args.use_test:
     test_loader = 'test'
 else:
     test_loader = 'val'
-loss, err, mIOU, model_output_targets = test(model, loaders[test_loader], criterion, return_outputs = True)
+loss, err, mIOU, model_output_targets = test(model, loaders[test_loader], criterion, return_outputs = True, return_scale = args.loss=='aleatoric')
 print(loss, 1-err, mIOU)
 
 outputs = np.concatenate(model_output_targets['outputs'])
 targets = np.concatenate(model_output_targets['targets'])
-np.savez(args.output, preds=outputs, targets=targets)
+
+if args.loss=='aleatoric':
+    scales = np.concatenate(model_output_targets['scales'])
+
+np.savez(args.output, preds=outputs, targets=targets, scales=scales)

@@ -62,8 +62,9 @@ def train(model, trn_loader, optimizer, criterion):
         targets = targets.cuda(non_blocking = True)
 
         optimizer.zero_grad()
-        loss, output = criterion(model, inputs, targets)
-
+        loss_dict = criterion(model, inputs, targets)
+        loss, output = loss_dict['loss'], loss_dict['output']
+        
         loss.backward()
         optimizer.step()
 
@@ -76,7 +77,7 @@ def train(model, trn_loader, optimizer, criterion):
     trn_error /= len(trn_loader)
     return trn_loss, trn_error
 
-def test(model, test_loader, criterion, num_classes = 11, return_outputs = False):
+def test(model, test_loader, criterion, num_classes = 11, return_outputs = False, return_scale = False):
     model.eval()
     with torch.no_grad():
         test_loss = 0
@@ -87,13 +88,16 @@ def test(model, test_loader, criterion, num_classes = 11, return_outputs = False
         if return_outputs:
             output_list = []
             target_list = []
+
+            scale_list = []
         
         for data, target in test_loader:
             data = data.cuda(non_blocking=True)
             target = target.cuda(non_blocking=True)
             output = model(data)
 
-            loss, output = criterion(model, data, target)
+            loss_dict = criterion(model, data, target)
+            loss, output = loss_dict['loss'], loss_dict['output']
             #test_loss += masked_loss(output, target, criterion)
             test_loss += loss
 
@@ -106,6 +110,9 @@ def test(model, test_loader, criterion, num_classes = 11, return_outputs = False
                 output_list.append(output.cpu().numpy())
                 target_list.append(target.cpu().numpy())
 
+            if return_scale:
+                scale_list.append(loss_dict['scale'].cpu().numpy())
+
         test_loss /= len(test_loader)
         test_error /= len(test_loader)
         m_jacc = np.mean(I_tot / U_tot)
@@ -113,7 +120,7 @@ def test(model, test_loader, criterion, num_classes = 11, return_outputs = False
         if not return_outputs:
             return test_loss, test_error, m_jacc
         else:
-            return test_loss, test_error, m_jacc, {'outputs': output_list, 'targets': target_list}
+            return test_loss, test_error, m_jacc, {'outputs': output_list, 'targets': target_list, 'scales': scale_list}
 
 def numpy_metrics(y_pred, y_true, n_classes = 11, void_labels=[11]):
     """

@@ -67,20 +67,12 @@ def masked_loss(y_pred, y_true, void_class = 11., weight=None, reduce = True):
         return loss, mask
 
 def seg_cross_entropy(model, input, target, weight = None):
-    """weights = torch.FloatTensor([
-    0.58872014284134, 0.51052379608154, 2.6966278553009,
-    0.45021694898605, 1.1785038709641, 0.77028578519821, 2.4782588481903,
-    2.5273461341858, 1.0122526884079, 3.2375309467316, 4.1312313079834]).cuda()"""
-    #todo: implement weights
-    #criterion = torch.nn.NLLLoss(weight=weights, reduction='none')
-
-
     output = model(input)
 
     # use masked loss function
     loss = masked_loss(output, target, weight=weight)
 
-    return loss, output
+    return {'loss': loss, 'output': output}
 
 def seg_ale_cross_entropy(model, input, target, num_samples = 50, weight = None):
         #requires two outputs for model(input)
@@ -100,4 +92,4 @@ def seg_ale_cross_entropy(model, input, target, num_samples = 50, weight = None)
                 total_loss = total_loss + current_loss.exp()
         mean_loss = total_loss / num_samples
 
-        return mean_loss.log().sum() / mask.sum(), mean    
+        return {'loss': mean_loss.log().sum() / mask.sum(), 'output': mean, 'scale': scale}
