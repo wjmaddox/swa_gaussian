@@ -233,7 +233,7 @@ if args.epochs % args.save_freq != 0:
         state_dict=model.state_dict(),
         optimizer=optimizer.state_dict()
     )
-    if args.swa:
+    if args.swa and args.epochs > args.swa_start:
         utils.save_checkpoint(
             args.dir,
             args.epochs,
