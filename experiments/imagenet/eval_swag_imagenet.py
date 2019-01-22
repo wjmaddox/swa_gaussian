@@ -33,6 +33,9 @@ parser.add_argument('--ckpt', type=str, required=True, default=None, metavar='CK
 parser.add_argument('--num_samples', type=int, default=30, metavar='N',
                     help='number of samples for SWAG (default: 30)')
 
+parser.add_argument('--scale', type=float, default=1.0, help='SWAG scale')
+parser.add_argument('--cov_mat', action='store_true', help='save sample covariance')
+
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 
 parser.add_argument('--save_path_swa', type=str, default=None, required=True, help='path to SWA npz results file')
@@ -65,7 +68,7 @@ loaders, num_classes = data.loaders(
 )
 
 print('Preparing model')
-swag_model = SWAG(model_class, no_cov_mat=True, num_classes=num_classes)
+swag_model = SWAG(model_class, no_cov_mat=not args.cov_mat, loading=True, max_num_models=20, num_classes=num_classes)
 swag_model.to(args.device)
 
 criterion = losses.cross_entropy
@@ -103,7 +106,7 @@ print('SWAG')
 swag_predictions = np.zeros((len(loaders['test'].dataset), num_classes))
 
 for i in range(args.num_samples):
-    swag_model.sample()
+    swag_model.sample(args.scale)
 
     print('SWAG Sample %d/%d. BN update' % (i + 1, args.num_samples))
     utils.bn_update(loaders['train'], swag_model, verbose=True, subset=0.1)
