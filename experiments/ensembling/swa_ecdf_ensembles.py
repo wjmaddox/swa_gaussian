@@ -26,7 +26,7 @@ parser.add_argument('--model', type=str, default='VGG16', metavar='MODEL',
 parser.add_argument('--epoch', type=int, default=160, metavar='N', help='epoch to begin evaluations at at (default: 200)')
 
 parser.add_argument('--no_ensembles', action='store_true', help='whether to run ensembles or not')
-parser.add_argument('--no_swa', action='store_true', help='whether to create swa from checkpoints')
+parser.add_argument('--swa', action='store_true', help='whether to create swa from checkpoints')
 #parser.add_argument('--swa', action='store_true', help='swa usage flag (default: off)')
 #parser.add_argument('--cov_mat', action='store_true', help='save sample covariance')
 
@@ -114,8 +114,10 @@ for i, ckpt in enumerate(dir_locs):
 
     model.load_state_dict(torch.load(ckpt)['state_dict'])
     epoch = int(ckpt.replace('.', '-').split('-')[1])
+    model.eval()
+    
     res = utils.eval(loaders['test'], model, criterion)
-
+    
     pt_loss.append(res['loss'])
     pt_accuracy.append(res['accuracy'])
 
