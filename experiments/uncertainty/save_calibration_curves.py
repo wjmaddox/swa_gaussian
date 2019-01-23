@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser(description='SGD/SWA training')
 parser.add_argument('--path', type=str, default=None, required=True, help='dataset name')
 parser.add_argument('--append', type=str, default="", required=False, help='string to add to filenames')
 parser.add_argument('--print_names', action='store_true', help = 'print method names')
-
+parser.add_argument('--num_bins', type=int, default=20, help = 'bin number for ECE')
 args = parser.parse_args()
 
 def parse(npz_arr):
@@ -22,7 +22,10 @@ def calibration_curve(npz_arr):
         out = None
     else:
         confidences = np.max(outputs, 1)
-        bins = np.sort(confidences)[::500]
+        step = (confidences.shape[0] + args.num_bins - 1) // args.num_bins
+        bins = np.sort(confidences)[::step]
+        if confidences.shape[0] % step != 1:
+            bins = np.concatenate((bins, [np.max(confidences)]))
         #bins = np.linspace(0.1, 1.0, 30)
         predictions = np.argmax(outputs,1)
         bin_lowers = bins[:-1]
