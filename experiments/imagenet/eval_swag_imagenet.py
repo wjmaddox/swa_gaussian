@@ -35,6 +35,7 @@ parser.add_argument('--num_samples', type=int, default=30, metavar='N',
 
 parser.add_argument('--scale', type=float, default=1.0, help='SWAG scale')
 parser.add_argument('--cov_mat', action='store_true', help='save sample covariance')
+parser.add_argument('--use_diag_bma', action='store_true', help='sample only diag variacne for BMA')
 
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 
@@ -106,7 +107,7 @@ print('SWAG')
 swag_predictions = np.zeros((len(loaders['test'].dataset), num_classes))
 
 for i in range(args.num_samples):
-    swag_model.sample(args.scale)
+    swag_model.sample(args.scale, cov=args.cov_mat and (not args.use_diag_bma))
 
     print('SWAG Sample %d/%d. BN update' % (i + 1, args.num_samples))
     utils.bn_update(loaders['train'], swag_model, verbose=True, subset=0.1)
