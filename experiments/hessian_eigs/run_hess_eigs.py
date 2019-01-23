@@ -1,3 +1,6 @@
+"""
+    script to compute maximum and minimum eigenvalues of the hessian
+"""
 import argparse
 import torch
 import torch.nn.functional as F

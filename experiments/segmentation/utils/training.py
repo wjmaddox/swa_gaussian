@@ -1,3 +1,7 @@
+"""
+    training helpers for segmentation
+    ported from: https://github.com/bfortuner/pytorch_tiramisu
+"""
 import os
 import sys
 import math

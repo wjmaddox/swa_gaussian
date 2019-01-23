@@ -1,6 +1,9 @@
+"""
+    layer definitions for 100-layer tiramisu
+    #from: https://github.com/bfortuner/pytorch_tiramisu
+"""
 import torch
 import torch.nn as nn
-
 
 class DenseLayer(nn.Sequential):
     def __init__(self, in_channels, growth_rate):

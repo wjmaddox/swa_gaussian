@@ -1,3 +1,7 @@
+"""
+    separate data loader for imagenet
+"""
+
 import os
 import torch
 import torchvision

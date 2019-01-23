@@ -1,3 +1,7 @@
+"""
+    image plotting helpers for segmentation
+    ported from: https://github.com/bfortuner/pytorch_tiramisu
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 

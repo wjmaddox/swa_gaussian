@@ -4,8 +4,6 @@ import torch.nn.functional as F
 import numpy as np
 import os
 import time
-#os.sys.path.append("/home/pi49/projects/private_swa_uncertainties")
-#os.sys.path.append("/home/izmailovpavel/Documents/Projects/private_swa_uncertainties/")
 import tqdm
 
 from swag import data, losses, models, utils
@@ -129,9 +127,7 @@ for i in range(args.N):
     with torch.no_grad():
         for input, target in tqdm.tqdm(loaders['test']):
             input = input.cuda(non_blocking=True)
-            ##TODO: is this needed?
-            #if args.method == 'Dropout':
-            #    model.apply(train_dropout)
+
             torch.manual_seed(i)
 
             if args.method == 'KFACLaplace':

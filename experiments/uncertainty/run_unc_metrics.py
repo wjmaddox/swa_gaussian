@@ -1,7 +1,6 @@
 import argparse
 import os
 import os
-os.sys.path.append("/home/izmailovpavel/Documents/Projects/private_swa_uncertainties/experiments/uncertainty")
 from temp_scaling import optimal_temp_scale, rescale_temp
 import numpy as np
 import pickle

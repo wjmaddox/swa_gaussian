@@ -9,7 +9,6 @@ import torch
 import torch.nn.functional as F
 import torchvision.models
 
-os.sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../'))
 import data
 from swag import utils, losses
 from swag.posteriors import SWAG

@@ -1,3 +1,8 @@
+"""
+    100-layer tiramisu/fc densenet67 model definition
+    ported from: #from: https://github.com/bfortuner/pytorch_tiramisu
+"""
+
 import torch
 import torch.nn as nn
 from torchvision import transforms

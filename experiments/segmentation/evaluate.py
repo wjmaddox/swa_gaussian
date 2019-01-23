@@ -1,3 +1,6 @@
+"""
+    evaluation script for sgd/swa
+"""
 import time
 from pathlib import Path
 import numpy as np

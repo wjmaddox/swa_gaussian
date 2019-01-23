@@ -1,7 +1,12 @@
+"""
+    training script for segmentation models
+    partial port of our own train/run_swag.py file
+    note: no options to train swag-diag
+"""
+
 import time
 from pathlib import Path
 import numpy as np
-#import matplotlib.pyplot as plt
 import os, sys
 import argparse
 

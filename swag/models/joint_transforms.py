@@ -1,3 +1,7 @@
+"""
+    joint transforms for segmentation data
+    ported from: #from: https://github.com/bfortuner/pytorch_tiramisu
+"""
 from __future__ import division
 import torch
 import math
@@ -6,7 +10,6 @@ from PIL import Image, ImageOps
 import numpy as np
 import numbers
 import types
-
 
 class JointScale(object):
     """Rescales the input PIL.Image to the given 'size'.

@@ -7,8 +7,6 @@ import sklearn.decomposition
 import tabulate
 import time
 
-os.sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../'))
-
 from swag import data, models, utils, losses
 from swag.posteriors import SWAG
 

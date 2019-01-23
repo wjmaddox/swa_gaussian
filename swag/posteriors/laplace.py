@@ -1,3 +1,8 @@
+"""
+    implementation of KFAC Laplace, see reference
+    base class ported from: https://github.com/Thrandis/EKFAC-pytorch/kfac.py
+"""
+
 import torch
 import torch.nn.functional as F
 import copy

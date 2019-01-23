@@ -1,3 +1,8 @@
+"""
+    theano model loading script
+    loading the pre-trained model provided in the 100-layers tiramisu code doesn't give reasonable accuracies
+    so there's probably a model definition issue
+"""
 import argparse
 import numpy as np
 import torch

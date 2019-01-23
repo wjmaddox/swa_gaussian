@@ -1,3 +1,8 @@
+"""
+    ensemble evaluation script for segmentation
+    note: only swag and dropout have been tested
+"""
+
 import time
 from pathlib import Path
 import numpy as np
@@ -28,7 +33,7 @@ parser.add_argument('--data_path', type=str, default='/home/wesley/Documents/Cod
 parser.add_argument('--use_test', dest='use_test', action='store_true', help='use test dataset instead of validation (default: False)')
 parser.add_argument('--batch_size', type=int, default=1, metavar='N', help='input batch size (default: 5)')
 parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
-parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'KFACLaplace', 'SGD', 'HomoNoise', 'Dropout', 'SWAGDrop'], required=True)
+parser.add_argument('--method', type=str, default='SWAG', choices=['SWAG', 'SGD', 'HomoNoise', 'Dropout', 'SWAGDrop'], required=True)
 parser.add_argument('--save_path', type=str, default=None, required=True, help='path to npz results file')
 parser.add_argument('--N', type=int, default=30)
 parser.add_argument('--scale', type=float, default=1.0)
@@ -66,7 +71,7 @@ if args.method in ['SWAG', 'HomoNoise', 'SWAGDrop']:
     model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20, loading=True, 
                 num_classes=num_classes, use_aleatoric=args.loss=='aleatoric')
 
-elif args.method in ['SGD', 'Dropout', 'KFACLaplace']:
+elif args.method in ['SGD', 'Dropout']:
     # construct and load model
     model = model_cfg.base(num_classes=num_classes, use_aleatoric=args.loss=='aleatoric')
 else:
@@ -82,13 +87,6 @@ print('Loading model %s' % args.file)
 checkpoint = torch.load(args.file)
 model.load_state_dict(checkpoint['state_dict'])
 
-if args.method == 'KFACLaplace':
-    print(len(loaders['train'].dataset))
-    model = KFACLaplace(model, eps = 5e-4, data_size = len(loaders['train'].dataset)) #eps: weight_decay
-
-    t_input, t_target = next(iter(loaders['train']))
-    t_input, t_target = t_input.cuda(non_blocking = True), t_target.cuda(non_blocking = True)
-
 if args.method == 'HomoNoise':
     std = 0.01
     for module, name in model.params:
@@ -97,7 +95,12 @@ if args.method == 'HomoNoise':
                             
 predictions = np.zeros((len(loaders['test'].dataset), 11, 360, 480))
 targets = np.zeros((len(loaders['test'].dataset), 360, 480))
-#predictions_list = []
+
+if args.loss=='aleatoric':
+    scales = np.zeros((len(loaders['test'].dataset), 11, 360, 480))
+else:
+    scales = None
+
 print(targets.size)
 
 for i in range(args.N):
@@ -122,13 +125,15 @@ for i in range(args.N):
         torch.manual_seed(i)
 
         with torch.no_grad():
-            if args.method == 'KFACLaplace':
-                output = model.net(input)
-            else:
-                output = model(input)
+            output = model(input)
+
+            if args.loss=='aleatoric':
+                scale = output[:, 1, :, :, :].abs().cpu().numpy()
+                output = output[:, 0, :, :, :]
+
+                scales[k:k+input.size(0), :, :, :] = scale
 
             batch_probs = F.softmax(output, dim=1).cpu().numpy()
-            #print(batch_probs.min(), batch_probs.max())
             
             predictions[k:k+input.size(0), :, :, :] += batch_probs
 
@@ -138,13 +143,11 @@ for i in range(args.N):
         k += input.size(0)
 
     np.savez(args.save_path+'pred_'+str(i), predictions = current_predictions)
-    #predictions_list.append(current_predictions)
 
     print(np.mean(np.argmax(predictions, axis=1) == targets))
 predictions /= args.N
 
-#entropies = -np.sum(np.log(predictions + eps) * predictions, axis=1)
-np.savez(args.save_path, predictions=predictions, targets=targets)
+np.savez(args.save_path, predictions=predictions, targets=targets, scales=scales)
 
 
 

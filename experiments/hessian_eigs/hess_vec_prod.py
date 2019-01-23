@@ -1,4 +1,8 @@
-# copied from https://github.com/tomgoldstein/loss-landscape/blob/master/hess_vec_prod.py
+"""
+    compute hessian vector products as well as eigenvalues of the hessian
+    # copied from https://github.com/tomgoldstein/loss-landscape/blob/master/hess_vec_prod.py
+"""
+
 import torch
 import time
 import numpy as np

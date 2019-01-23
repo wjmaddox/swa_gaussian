@@ -1,3 +1,7 @@
+"""
+    utils for gradient covariance experiment
+"""
+
 import itertools
 import tqdm
 import torch
