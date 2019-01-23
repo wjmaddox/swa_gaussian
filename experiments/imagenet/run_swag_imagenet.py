@@ -45,6 +45,7 @@ parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
 parser.add_argument('--wd', type=float, default=1e-4, help='weight decay (default: 1e-4)')
 
 parser.add_argument('--swa', action='store_true', help='swa usage flag (default: off)')
+parser.add_argument('--swa_cpu', action='store_true', help='store swag on cpu (default: off)')
 parser.add_argument('--swa_start', type=float, default=161, metavar='N',
                     help='SWA start epoch number (default: 161)')
 parser.add_argument('--swa_lr', type=float, default=0.02, metavar='LR',
@@ -102,11 +103,14 @@ else:
     args.no_cov_mat = True
 if args.swa:
     print('SWAG training')
+    args.swa_device = 'cpu' if args.swa_cpu else args.device
     swag_model = SWAG(model_class, no_cov_mat=args.no_cov_mat, max_num_models=20,
                       num_classes=num_classes)
-    swag_model.to(args.device)
+    swag_model.to(args.swa_device)
     if args.pretrained:
+        model.to(args.swa_device)
         swag_model.collect_model(model)
+        model.to(args.device)
 else:
     print('SGD training')
 
@@ -160,6 +164,8 @@ utils.save_checkpoint(
     optimizer=optimizer.state_dict()
 )
 
+num_iterates = 0
+
 for epoch in range(start_epoch, args.epochs):
     time_ep = time.time()
 
@@ -175,10 +181,20 @@ for epoch in range(start_epoch, args.epochs):
         for i in range(args.swa_freq):
             print('PART %d/%d' % (i + 1, args.swa_freq))
             train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, subset=subset, verbose=True)
+
+            num_iterates += 1
+            utils.save_checkpoint(
+                args.dir,
+                num_iterates,
+                name='iter',
+                state_dict=model.state_dict(),
+            )
+
+            model.to(args.swa_device)
             swag_model.collect_model(model)
+            model.to(args.device)
     else:
-        train_res = utils.train_epoch(loaders['tr'
-                                              'ain'], model, criterion, optimizer, verbose=True)
+        train_res = utils.train_epoch(loaders['train'], model, criterion, optimizer, verbose=True)
 
     if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
         print('EPOCH %d. EVAL' % (epoch + 1))
@@ -189,27 +205,30 @@ for epoch in range(start_epoch, args.epochs):
     if args.swa and (epoch + 1) > args.swa_start:
         if epoch == args.swa_start or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
             swag_res = {'loss': None, 'accuracy': None}
+            swag_model.to(args.device)
             swag_model.sample(0.0)
             print('EPOCH %d. SWAG BN' % (epoch + 1))
             utils.bn_update(loaders['train'], swag_model, verbose=True, subset=0.1)
             print('EPOCH %d. SWAG EVAL' % (epoch + 1))
             swag_res = utils.eval(loaders['test'], swag_model, criterion, verbose=True)
+            swag_model.to(args.swa_device)
         else:
             swag_res = {'loss': None, 'accuracy': None}
 
     if (epoch + 1) % args.save_freq == 0:
-        utils.save_checkpoint(
-            args.dir,
-            epoch + 1,
-            state_dict=model.state_dict(),
-            optimizer=optimizer.state_dict()
-        )
         if args.swa:
             utils.save_checkpoint(
                 args.dir,
                 epoch + 1,
                 name='swag',
                 state_dict=swag_model.state_dict(),
+            )
+        else:
+            utils.save_checkpoint(
+                args.dir,
+                epoch + 1,
+                state_dict=model.state_dict(),
+                optimizer=optimizer.state_dict()
             )
 
     time_ep = time.time() - time_ep
@@ -224,16 +243,16 @@ for epoch in range(start_epoch, args.epochs):
     print(table)
 
 if args.epochs % args.save_freq != 0:
-    utils.save_checkpoint(
-        args.dir,
-        args.epochs,
-        state_dict=model.state_dict(),
-        optimizer=optimizer.state_dict()
-    )
     if args.swa:
         utils.save_checkpoint(
             args.dir,
             args.epochs,
             name='swag',
             state_dict=swag_model.state_dict(),
+        )
+    else:
+        utils.save_checkpoint(
+            args.dir,
+            args.epochs,
+            state_dict=model.state_dict(),
         )
