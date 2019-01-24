@@ -62,29 +62,17 @@ def nll(outputs, labels):
 print('Using model %s' % args.model)
 model_cfg = getattr(models, args.model)
 
-#sorry this is hardcoded for now
-if args.dataset == 'CIFAR10.1':
-    #from torchvision import transforms
-    import sys
-    sys.path.append('/home/wm326/CIFAR-10.1/code')
-    from cifar10_1_dataset import cifar10_1
-    
-    dataset = cifar10_1(transform=model_cfg.transform_test)
-    loaders = {'test': torch.utils.data.DataLoader(dataset, batch_size = args.batch_size, num_workers = args.num_workers)}
-
-    num_classes = 10
-else:
-    print('Loading dataset %s from %s' % (args.dataset, args.data_path))
-    loaders, num_classes = data.loaders(
-        args.dataset,
-        args.data_path,
-        args.batch_size,
-        args.num_workers,
-        model_cfg.transform_train,
-        model_cfg.transform_test,
-        use_validation=not args.use_test,
-        split_classes=None
-    )
+print('Loading dataset %s from %s' % (args.dataset, args.data_path))
+loaders, num_classes = data.loaders(
+    args.dataset,
+    args.data_path,
+    args.batch_size,
+    args.num_workers,
+    model_cfg.transform_train,
+    model_cfg.transform_test,
+    use_validation=not args.use_test,
+    split_classes=None
+)
 
 print('Preparing model')
 model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
