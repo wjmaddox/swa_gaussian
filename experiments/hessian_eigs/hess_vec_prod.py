@@ -74,29 +74,48 @@ def eval_hess_vec_prod(vec, params, net, criterion, dataloader, use_cuda=False):
     net.zero_grad() # clears grad for every parameter in the net
 
     for batch_idx, (inputs, targets) in enumerate(dataloader):
-        if batch_idx < 10:
-            inputs, targets = Variable(inputs), Variable(targets)
-            if use_cuda:
-                inputs, targets = inputs.cuda(), targets.cuda()
+        inputs, targets = Variable(inputs), Variable(targets)
+        if use_cuda:
+            inputs, targets = inputs.cuda(), targets.cuda()
 
-            outputs = net(inputs)
-            loss = criterion(outputs, targets)
-            grad_f = torch.autograd.grad(loss, inputs=params, create_graph=True)
+        outputs = net(inputs)
+        loss = criterion(outputs, targets)
+        grad_f = torch.autograd.grad(loss, inputs=params, create_graph=True)
 
-            # Compute inner product of gradient with the direction vector
-            #prod = Variable(torch.zeros(1)).type(type(grad_f[0].data))
-            prod = torch.zeros(1, dtype=grad_f[0].dtype, device = grad_f[0].device)
-            for (g, v) in zip(grad_f, vec):
-                prod = prod + (g * v).sum()
+        # Compute inner product of gradient with the direction vector
+        #prod = Variable(torch.zeros(1)).type(type(grad_f[0].data))
+        prod = torch.zeros(1, dtype=grad_f[0].dtype, device = grad_f[0].device)
+        for (g, v) in zip(grad_f, vec):
+            prod = prod + (g * v).sum()
 
-            # Compute the Hessian-vector product, H*v
-            # prod.backward() computes dprod/dparams for every parameter in params and
-            # accumulate the gradients into the params.grad attributes
-            prod.backward()
+        # Compute the Hessian-vector product, H*v
+        # prod.backward() computes dprod/dparams for every parameter in params and
+        # accumulate the gradients into the params.grad attributes
+        prod.backward()
+
+def power_method(matmul_closure, N, tolerance, max_steps, dtype, device):
+    q_initial = torch.randn(N, 1, dtype = dtype, device = device)
+    q_initial = q_initial / q_initial.norm()
+    lambda_old = 1e10
+
+    A_m_qcurr = matmul_closure(q_initial)
+    for i in range(max_steps):
+        #z_current = hess_vec_prod(q_current)
+        z_current = A_m_qcurr
+        q_current = z_current / z_current.norm()
+
+        A_m_qcurr = matmul_closure(q_current)
+        lambda_current = q_current.t().matmul(A_m_qcurr)
+        
+        if (lambda_current - lambda_old).norm() < tolerance:
+            print('Convergence: ', lambda_current)
+            break
         else:
-            continue
+            print('Step: ', i, lambda_current)
+        
+        lambda_old = lambda_current
 
-
+    return lambda_current
 ################################################################################
 #                  For computing Eigenvalues of Hessian
 ################################################################################
@@ -123,40 +142,55 @@ def min_max_hessian_eigs(net, dataloader, criterion, rank=0, use_cuda=False, ver
         hess_vec_prod.count += 1  # simulates a static variable
         #print(vec, vec.dtype, vec.device)
         #vec = npvec_to_tensorlist(vec, params)
-        vec = unflatten_like(vec, params)
+        vec = unflatten_like(vec.t(), params)
 
         start_time = time.time()
         eval_hess_vec_prod(vec, params, net, criterion, dataloader, use_cuda)
         prod_time = time.time() - start_time
         if verbose and rank == 0: print("   Iter: %d  time: %f" % (hess_vec_prod.count, prod_time))
         #return gradtensor_to_npvec(net)
-        return gradtensor_to_tensor(net)
+        out = gradtensor_to_tensor(net)
+        return out.unsqueeze(1)
 
     hess_vec_prod.count = 0
     if verbose and rank == 0: print("Rank %d: computing max eigenvalue" % rank)
 
     #A = LinearOperator((N, N), matvec=hess_vec_prod)
     #pos_eigvals, _ = eigsh(A, k=1, tol=1e-2)
-    _, pos_t_mat = lanczos_tridiag(hess_vec_prod, 15, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
+    maxeig = power_method(hess_vec_prod, N, 1e-2, 40, device = params[0].device, dtype = params[0].dtype)
+    """_, pos_t_mat = lanczos_tridiag(hess_vec_prod, 200, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
     pos_eigvals, _ = lanczos_tridiag_to_diag(pos_t_mat)
-    print(pos_eigvals.size())
-    maxeig = pos_eigvals[0]
+    print(pos_eigvals)
+    # eigenvalues may not be sorted
+    maxeig = torch.max(pos_eigvals)"""
+
+
+    #maxeig = pos_eigvals[0]
     if verbose and rank == 0: print('max eigenvalue = %f' % maxeig)
 
     # If the largest eigenvalue is positive, shift matrix so that any negative eigenvalue is now the largest
     # We assume the smallest eigenvalue is zero or less, and so this shift is more than what we need
-    shift = maxeig*.51
+    #shift = maxeig*.51
+    shift = 0.51 * maxeig.item()
+    print(shift)
     def shifted_hess_vec_prod(vec):
-        return hess_vec_prod(vec) - shift*vec
+        hvp = hess_vec_prod(vec)
+        return hvp - shift*vec
 
     if verbose and rank == 0: print("Rank %d: Computing shifted eigenvalue" % rank)
 
     #A = LinearOperator((N, N), matvec=shifted_hess_vec_prod)
     #neg_eigvals, _ = eigsh(A, k=1, tol=1e-2)
-    _, neg_t_mat = lanczos_tridiag(shifted_hess_vec_prod, 50, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
+    """_, neg_t_mat = lanczos_tridiag(shifted_hess_vec_prod, 200, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
     neg_eigvals, _ = lanczos_tridiag_to_diag(neg_t_mat)
+    print(neg_eigvals)
     neg_eigvals = neg_eigvals + shift
-    mineig = neg_eigvals[0]
+    print(neg_eigvals)
+    mineig = torch.min(neg_eigvals)
+    #mineig = neg_eigvals[0]"""
+    mineig = power_method(shifted_hess_vec_prod, N, 1e-2, 40, device = params[0].device, dtype = params[0].dtype)
+    mineig = mineig.item() + shift
+    print(mineig)
     if verbose and rank == 0: print('min eigenvalue = ' + str(mineig))
 
     if maxeig <= 0 and mineig > 0:
