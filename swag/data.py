@@ -3,7 +3,7 @@ import torch
 import torchvision
 import os
 
-from .regression_data import generate_boston, generate_boston
+#from .regression_data import generate_boston, generate_boston
 from .camvid import CamVid
 
 c10_classes = np.array([
