@@ -49,9 +49,9 @@ class Test_SWAG_Sampling(unittest.TestCase):
             sq_mean_list.append( sq_mean )
             cov_mat_sqrt_list.append( cov_mat_sqrt )
 
-        mean = flatten(mean_list)
-        sq_mean = flatten(sq_mean_list)
-        cov_mat_sqrt = torch.cat(cov_mat_sqrt_list, dim=1)
+        mean = flatten(mean_list).cuda()
+        sq_mean = flatten(sq_mean_list).cuda()
+        cov_mat_sqrt = torch.cat(cov_mat_sqrt_list, dim=1).cuda()
 
         true_cov_mat = (1.0/(swag_model.max_num_models - 1)) * cov_mat_sqrt.t().matmul(cov_mat_sqrt) + torch.diag(sq_mean - mean ** 2)
 
@@ -115,8 +115,8 @@ class Test_SWAG_Sampling(unittest.TestCase):
             mean_list.append( mean )
             sq_mean_list.append( sq_mean )
 
-        mean = flatten(mean_list)
-        sq_mean = flatten(sq_mean_list)
+        mean = flatten(mean_list).cuda()
+        sq_mean = flatten(sq_mean_list).cuda()
         
         
          
