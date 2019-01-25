@@ -29,12 +29,29 @@ Unless otherwise described, all experiments were run on a single GPU.
 |   +-- segmentation/ (folder containing training scripts for segmentation experiments)
 |   +-- uncertainty/ (folder containing scripts and methods for all uncertainty experiments)
 |   +-- width/ (folder containing scripts for PCA and SVD of SGD trajectories)
-+-- tests/ (folder containing tests for SWAG sampling and SWAG log-likelihood calculation.)```
++-- tests/ (folder containing tests for SWAG sampling and SWAG log-likelihood calculation.)
+```
 
-Example:
-```python run_hess_eigs.py --dataset CIFAR100 --data_path [data_path] --model PreResNet110 --use_test --file [ckpt] --save_path [output.npz] ```
-        Example:
-```python run_grad_cov.py --data_path [data_path] --dataset CIFAR100 --model VGG16 --use_test --epochs=300 --lr_init=0.05 --wd=5e-4 --swa --swa_start 161 --swa_lr=0.01 --grad_cov_start 251 --dir [dir] ```
+### Example Commands
+
+Hessian maximum and minimum eigenvalue command:
+```cd experiments/hessian_eigs; python run_hess_eigs.py --dataset CIFAR100 --data_path [data_path] --model PreResNet110 --use_test --file [ckpt] --save_path [output.npz] ```
+
+Gradient covariance experiment:
+```cd experiments/grad_cov; python run_grad_cov.py --dataset CIFAR100 --data_path [data_path] --model VGG16 --use_test --epochs=300 --lr_init=0.05 --wd=5e-4 --swa --swa_start 161 --swa_lr=0.01 --grad_cov_start 251 --dir [dir] ```
+
+Segmentation:
+  - train SWAG model
+  ```python train.py --data_path [data_path] --model FCDenseNet67 --loss cross_entropy --optimizer SGD --lr_init 1e-2 --batch_size 4 --ft_start 750 --ft_batch_size 1 --epochs 1000 --swa --swa_start=850 --swa_lr=1e-3 --dir [dir] ```
+
+  - train SGD model
+  ```python train.py --data_path [data_path] --model FCDenseNet67 --loss cross_entropy --optimizer SGD --lr_init 1e-2 --batch_size 4 --ft_start 750 --ft_batch_size 1 --epochs 1000 --dir [dir] ```
+  
+  - run MC Dropout at test time
+  ```python eval_ensemble.py --data_path [data_path] --batch_size 4 --method Dropout --loss cross_entropy --N 50 --file [sgd_checkpoint] --save_path [output.npz] ```
+  
+  - run SWAG at test time
+  ```python eval_ensemble.py --data_path [data_path] --batch_size 4 --method SWAG --scale=0.5 --loss cross_entropy --N 50 --file [swag_checkpoint] --save_path [output.npz] ```
 
 ## References for Code Base
 
