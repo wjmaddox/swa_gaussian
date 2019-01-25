@@ -12,18 +12,13 @@ Unless otherwise described, all experiments were run on a single GPU.
 ## File Structure
 
 .
-
 +-- swag/
 
-+-- posteriors/
-
-    |   +-- swag.py (class definition for SWA, SWAG and SWAG-Diag)
-
-    |   +-- laplace.py (class definition for KFAC Laplace)
-
-    +-- models/ (Folder with all model definitions)
-
-    +-- utils.py (utility functions)
+    |   +-- posteriors/
+        |   +-- swag.py (class definition for SWA, SWAG and SWAG-Diag)
+        |   +-- laplace.py (class definition for KFAC Laplace)
+    |   +-- models/ (Folder with all model definitions)
+    |   +-- utils.py (utility functions)
 
 +-- experiments/
 
