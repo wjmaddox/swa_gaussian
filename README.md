@@ -5,7 +5,7 @@ Installation:
 python setup.py develop
 ```
 
-See requirements.txt file for requirements that came from our setup.
+See requirements.txt file for requirements that came from our setup. We use Pytorch 1.0.0 in our experiments.
 
 Unless otherwise described, all experiments were run on a single GPU.
 
