@@ -62,3 +62,7 @@ Model implementations:
 Hessian eigenvalue computation: [PyTorch repo](https://github.com/tomgoldstein/loss-landscape)
 
 Segmentation evaluation metrics: [Lasagne repo](https://github.com/SimJeg/FC-DenseNet/blob/master/metrics.py)
+
+## Figures 
+
+<!b ToDo -->
