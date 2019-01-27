@@ -8,7 +8,7 @@ import time
 import numpy as np
 from torch import nn
 from torch.autograd import Variable
-#from scipy.sparse.linalg import LinearOperator, eigsh
+from scipy.sparse.linalg import LinearOperator, eigsh
 from gpytorch.utils.lanczos import lanczos_tridiag, lanczos_tridiag_to_diag
 
 from swag.utils import flatten, unflatten_like
@@ -157,12 +157,12 @@ def min_max_hessian_eigs(net, dataloader, criterion, rank=0, use_cuda=False, ver
 
     #A = LinearOperator((N, N), matvec=hess_vec_prod)
     #pos_eigvals, _ = eigsh(A, k=1, tol=1e-2)
-    maxeig = power_method(hess_vec_prod, N, 1e-2, 40, device = params[0].device, dtype = params[0].dtype)
-    """_, pos_t_mat = lanczos_tridiag(hess_vec_prod, 200, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
+    #maxeig = power_method(hess_vec_prod, N, 1e-2, 40, device = params[0].device, dtype = params[0].dtype)
+    _, pos_t_mat = lanczos_tridiag(hess_vec_prod, 100, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
     pos_eigvals, _ = lanczos_tridiag_to_diag(pos_t_mat)
     print(pos_eigvals)
     # eigenvalues may not be sorted
-    maxeig = torch.max(pos_eigvals)"""
+    maxeig = torch.max(pos_eigvals)
 
 
     #maxeig = pos_eigvals[0]
@@ -175,21 +175,24 @@ def min_max_hessian_eigs(net, dataloader, criterion, rank=0, use_cuda=False, ver
     print(shift)
     def shifted_hess_vec_prod(vec):
         hvp = hess_vec_prod(vec)
-        return hvp - shift*vec
+        return -hvp + shift*vec
+    
+    shifted_hvp_numpy = lambda x: shifted_hess_vec_prod(torch.tensor(x).float().cuda().unsqueeze(1)).squeeze(1).cpu().numpy()
+
 
     if verbose and rank == 0: print("Rank %d: Computing shifted eigenvalue" % rank)
 
-    #A = LinearOperator((N, N), matvec=shifted_hess_vec_prod)
-    #neg_eigvals, _ = eigsh(A, k=1, tol=1e-2)
-    """_, neg_t_mat = lanczos_tridiag(shifted_hess_vec_prod, 200, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
+    """A = LinearOperator((N, N), matvec=shifted_hvp_numpy)
+    neg_eigvals, _ = eigsh(A, k=1, tol=1e-2)
+    mineig = neg_eigvals[0]
+    print(- neg_eigvals + shift)"""
+    _, neg_t_mat = lanczos_tridiag(shifted_hess_vec_prod, 200, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
     neg_eigvals, _ = lanczos_tridiag_to_diag(neg_t_mat)
+    mineig = torch.max(neg_eigvals)
     print(neg_eigvals)
-    neg_eigvals = neg_eigvals + shift
-    print(neg_eigvals)
-    mineig = torch.min(neg_eigvals)
     #mineig = neg_eigvals[0]"""
-    mineig = power_method(shifted_hess_vec_prod, N, 1e-2, 40, device = params[0].device, dtype = params[0].dtype)
-    mineig = mineig.item() + shift
+    #mineig = power_method(shifted_hess_vec_prod, N, 1e-3, 300, device = params[0].device, dtype = params[0].dtype)
+    mineig = -mineig + shift
     print(mineig)
     if verbose and rank == 0: print('min eigenvalue = ' + str(mineig))
 
