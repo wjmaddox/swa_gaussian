@@ -6,7 +6,6 @@ from . import (
     data,
     losses,
     utils, 
-    regression_data,
 )
 
 __all__ = [
@@ -16,7 +15,6 @@ __all__ = [
     "losses",
     "models",
     "posteriors",
-    "regression_data"
     #classes
 
     #functions
