@@ -9,7 +9,7 @@ from torchvision import transforms
 
 from .layers import DenseBlock, TransitionDown, TransitionUp, Bottleneck
 #import .joint_transforms as joint_transforms
-from .joint_transforms import JointRandomCrop, JointRandomHorizontalFlip
+from .joint_transforms import JointRandomResizedCrop, JointRandomHorizontalFlip, JointCompose, LabelToLongTensor
 
 __all__ = ['FCDenseNet57', 'FCDenseNet67', 'FCDenseNet103']
 
@@ -140,11 +140,11 @@ class FCDenseNet57:
           transforms.Normalize(mean=camvid_mean, std=camvid_std),
     ])
 
-    joint_transform = transforms.Compose([
-        JointRandomCrop(224), # commented for fine-tuning
+    joint_transform = JointCompose([
+        JointRandomResizedCrop(224), # commented for fine-tuning
         JointRandomHorizontalFlip()
     ])
-    ft_joint_transform = transforms.Compose([
+    ft_joint_transform = JointCompose([
         JointRandomHorizontalFlip()
     ])
 
@@ -168,12 +168,16 @@ class FCDenseNet67:
           transforms.Normalize(mean=camvid_mean, std=camvid_std),
     ])
 
-    joint_transform = transforms.Compose([
-        JointRandomCrop(224), # commented for fine-tuning
+    joint_transform = JointCompose([
+        JointRandomResizedCrop(224), # commented for fine-tuning
         JointRandomHorizontalFlip()
     ])
     ft_joint_transform = transforms.Compose([
         JointRandomHorizontalFlip()
+    ])
+
+    target_transform = transforms.Compose([
+        LabelToLongTensor(),
     ])
 
 class FCDenseNet103:
@@ -196,11 +200,11 @@ class FCDenseNet103:
           transforms.Normalize(mean=camvid_mean, std=camvid_std),
     ])
 
-    joint_transform = transforms.Compose([
-        JointRandomCrop(224), # commented for fine-tuning
+    joint_transform = JointCompose([
+        JointRandomResizedCrop(224), # commented for fine-tuning
         JointRandomHorizontalFlip()
     ])
-    ft_joint_transform = transforms.Compose([
+    ft_joint_transform = JointCompose([
         JointRandomHorizontalFlip()
     ])
 
