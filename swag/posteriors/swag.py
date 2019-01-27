@@ -26,7 +26,7 @@ def unflatten_like(vector, likeTensorList):
         i+=n
     return outList
 
-def swag_parameters(module, params, no_cov_mat=True, num_models=0):
+def swag_parameters(module, params, no_cov_mat=True):
     for name in list(module._parameters.keys()):
         if module._parameters[name] is None:
             continue
@@ -36,29 +36,25 @@ def swag_parameters(module, params, no_cov_mat=True, num_models=0):
         module.register_buffer('%s_sq_mean' % name, data.new(data.size()).zero_())
 
         if no_cov_mat is False:
-            module.register_buffer( '%s_cov_mat_sqrt' % name, data.new_empty((num_models, data.numel())).zero_() )
+            module.register_buffer( '%s_cov_mat_sqrt' % name, data.new_empty((0, data.numel())).zero_() )
 
         params.append((module, name))
 
 
 class SWAG(torch.nn.Module):
-    def __init__(self, base, no_cov_mat = True, max_num_models = 0, loading = False, var_clamp = 1e-30, *args, **kwargs):
+    def __init__(self, base, no_cov_mat = True, max_num_models = 0, var_clamp = 1e-30, *args, **kwargs):
         super(SWAG, self).__init__()
 
-        self.register_buffer('n_models', torch.zeros([1]))
+        self.register_buffer('n_models', torch.zeros([1], dtype=torch.long))
         self.params = list()
 
         self.no_cov_mat = no_cov_mat
         self.max_num_models = max_num_models
-        if loading is True:
-            num_models = self.max_num_models
-        else:
-            num_models = 0
 
         self.var_clamp = var_clamp
 
         self.base = base(*args, **kwargs)
-        self.base.apply(lambda module: swag_parameters(module=module, params=self.params, no_cov_mat=self.no_cov_mat, num_models=num_models))
+        self.base.apply(lambda module: swag_parameters(module=module, params=self.params, no_cov_mat=self.no_cov_mat))
 
     def forward(self, input):
         return self.base(input)
@@ -153,10 +149,10 @@ class SWAG(torch.nn.Module):
             sq_mean = module.__getattr__('%s_sq_mean' % name)
             
             #first moment
-            mean = mean * self.n_models / (self.n_models + 1.0) + base_param.data / (self.n_models + 1.0)
+            mean = mean * self.n_models.item() / (self.n_models.item() + 1.0) + base_param.data / (self.n_models.item() + 1.0)
 
             #second moment
-            sq_mean = sq_mean * self.n_models / (self.n_models + 1.0) + base_param.data ** 2 / (self.n_models + 1.0)
+            sq_mean = sq_mean * self.n_models.item() / (self.n_models.item() + 1.0) + base_param.data ** 2 / (self.n_models.item() + 1.0)
 
             #square root of covariance matrix
             if self.no_cov_mat is False:
@@ -167,13 +163,23 @@ class SWAG(torch.nn.Module):
                 cov_mat_sqrt = torch.cat((cov_mat_sqrt, dev.view(-1,1).t()),dim=0)
 
                 #remove first column if we have stored too many models
-                if (self.n_models+1) > self.max_num_models:
+                if (self.n_models.item()+1) > self.max_num_models:
                     cov_mat_sqrt = cov_mat_sqrt[1:, :]
                 module.__setattr__('%s_cov_mat_sqrt' % name, cov_mat_sqrt)
 
             module.__setattr__('%s_mean' % name, mean)
             module.__setattr__('%s_sq_mean' % name, sq_mean)
-        self.n_models.add_(1.0)
+        self.n_models.add_(1)
+
+    def load_state_dict(self, state_dict, strict=True):
+        if not self.no_cov_mat:
+            n_models = state_dict['n_models'].item()
+            rank = min(n_models, self.max_num_models)
+            print(rank)
+            for module, name in self.params:
+                mean = module.__getattr__('%s_mean' % name)
+                module.__setattr__('%s_cov_mat_sqrt' % name, mean.new_empty((rank, mean.numel())).zero_())
+        super(SWAG, self).load_state_dict(state_dict, strict)
 
     def export_numpy_params(self, export_cov_mat=False):
         mean_list = []

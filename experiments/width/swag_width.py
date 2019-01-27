@@ -1,7 +1,5 @@
 import argparse
-import os
 import torch
-import torch.nn.functional as F
 import numpy as np
 import sklearn.decomposition
 import tabulate
@@ -78,23 +76,17 @@ for path in args.checkpoint:
     swag_model.collect_model(model)
     W.append(np.concatenate([p.detach().cpu().numpy().ravel() for p in model.parameters()]))
 W = np.array(W)
-print('Shape: %d %d' % (W.shape[0], W.shape[1]))
 
 mean, _, cov_mat_list = swag_model.export_numpy_params(export_cov_mat=True)
 cov_mat = np.hstack([mat.reshape(args.swag_rank, -1) for mat in cov_mat_list])
 
 tsvd = sklearn.decomposition.TruncatedSVD(n_components=args.swag_rank, n_iter=7)
 tsvd.fit(cov_mat)
-print(tsvd.components_.shape)
-print(np.diag(np.dot(np.dot(tsvd.components_, cov_mat.T), np.dot(cov_mat, tsvd.components_.T))) / (cov_mat.shape[0] - 1))
-print(tsvd.explained_variance_)
-print(tsvd.explained_variance_ratio_ * 100.0)
 
 component_variances = np.dot(np.dot(tsvd.components_, cov_mat.T), np.dot(cov_mat, tsvd.components_.T)) / (cov_mat.shape[0] - 1)
 
 pc_idx = [0, 1, 2, 3, 4, args.swag_rank // 2 - 1, args.swag_rank // 2, args.swag_rank // 2 + 1, args.swag_rank - 2, args.swag_rank - 1]
 pc_idx = np.sort(np.unique(np.minimum(pc_idx, args.swag_rank - 1)))
-print(pc_idx)
 K = len(pc_idx)
 
 ts = np.linspace(-args.dist, args.dist, args.N)
@@ -104,13 +96,13 @@ train_loss = np.zeros((K, args.N))
 test_acc = np.zeros((K, args.N))
 test_loss = np.zeros((K, args.N))
 
+columns = ['PC', 't', 'tr_loss', 'tr_acc', 'te_loss', 'te_acc', 'time']
 
 for i, id in enumerate(pc_idx):
-    print('PC %d. Variance %.4f ratio: %.2f%%' % (id, tsvd.explained_variance_[id], tsvd.explained_variance_ratio_[id] * 100.0))
     v = tsvd.components_[id, :].copy()
     v /= np.linalg.norm(v)
     for j, t in enumerate(ts):
-        print('t: %.2f' % t)
+        start_time = time.time()
         w = mean + t * v
 
         offset = 0
@@ -119,19 +111,24 @@ for i, id in enumerate(pc_idx):
             param.data.copy_(param.new_tensor(w[offset:offset+size].reshape(param.size())))
             offset += size
 
-        print('BN')
         utils.bn_update(loaders['train'], model)
-        print('Train')
         train_res = utils.eval(loaders['train'], model, criterion)
-        print(train_res)
-        print('Test')
         test_res = utils.eval(loaders['test'], model, criterion)
-        print(test_res)
 
         train_acc[i, j] = train_res['accuracy']
         train_loss[i, j] = train_res['loss']
         test_acc[i, j] = test_res['accuracy']
         test_loss[i, j] = test_res['loss']
+
+        run_time = time.time() - start_time
+        values = [id, t, train_loss[i, j], train_acc[i, j], test_loss[i, j], test_acc[i, j], run_time]
+        table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
+        if j == 0:
+            table = table.split('\n')
+            table = '\n'.join([table[1]] + table)
+        else:
+            table = table.split('\n')[2]
+        print(table)
 
 np.savez(
     args.save_path,

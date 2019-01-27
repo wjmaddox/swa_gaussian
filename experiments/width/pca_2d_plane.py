@@ -1,14 +1,11 @@
 import argparse
-import os
 import torch
-import torch.nn.functional as F
 import numpy as np
 import sklearn.decomposition
 import tabulate
 import time
 
 from swag import data, models, utils, losses
-from swag.posteriors import SWAG
 
 parser = argparse.ArgumentParser(description='PCA plane')
 
@@ -73,16 +70,12 @@ for path in args.checkpoint:
     model.load_state_dict(checkpoint['state_dict'])
     W.append(np.concatenate([p.detach().cpu().numpy().ravel() for p in model.parameters()]))
 W = np.array(W)
-print('Shape: %d %d' % (W.shape[0], W.shape[1]))
 
 pca = sklearn.decomposition.PCA(n_components=num_checkpoints)
 pca.fit(W)
-print(pca.explained_variance_ratio_ * 100.0)
-
 
 xs = np.linspace(-args.dist, args.dist, args.N)
 ys = np.linspace(-args.dist, args.dist, args.N)
-
 
 train_acc = np.zeros((args.N, args.N))
 train_loss = np.zeros((args.N, args.N))

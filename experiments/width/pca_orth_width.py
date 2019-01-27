@@ -1,12 +1,11 @@
 import argparse
-import os
 import torch
-import torch.nn.functional as F
 import numpy as np
 import sklearn.decomposition
+import tabulate
+import time
 
 from swag import data, models, utils, losses
-from swag.posteriors import SWAG
 
 parser = argparse.ArgumentParser(description='Width along PCA directions')
 
@@ -76,19 +75,17 @@ pca = sklearn.decomposition.PCA(n_components=W.shape[0])
 pca.fit(W)
 print(pca.explained_variance_ratio_ * 100.0)
 
-
-
 ts = np.linspace(-args.dist, args.dist, args.N)
-
 
 train_acc = np.zeros((args.K, args.N))
 train_loss = np.zeros((args.K, args.N))
 test_acc = np.zeros((args.K, args.N))
 test_loss = np.zeros((args.K, args.N))
 
+columns = ['ray', 't', 'tr_loss', 'tr_acc', 'te_loss', 'te_acc', 'time']
+
 mean = pca.mean_
 for i in range(args.K):
-    print('Ray %d/%d' % (i + 1, args.K))
     v = np.random.normal(size=W.shape[1])
     v /= np.linalg.norm(v)
     for j in range(pca.components_.shape[0]):
@@ -96,8 +93,9 @@ for i in range(args.K):
         g /= np.linalg.norm(g)
         v -= g * np.sum(g * v)
         v /= np.linalg.norm(v)
+
     for j, t in enumerate(ts):
-        print('t: %.2f' % t)
+        start_time = time.time()
         w = mean + t * v
 
         offset = 0
@@ -106,19 +104,24 @@ for i in range(args.K):
             param.data.copy_(param.new_tensor(w[offset:offset+size].reshape(param.size())))
             offset += size
 
-        print('BN')
         utils.bn_update(loaders['train'], model)
-        print('Train')
         train_res = utils.eval(loaders['train'], model, criterion)
-        print(train_res)
-        print('Test')
         test_res = utils.eval(loaders['test'], model, criterion)
-        print(test_res)
 
         train_acc[i, j] = train_res['accuracy']
         train_loss[i, j] = train_res['loss']
         test_acc[i, j] = test_res['accuracy']
         test_loss[i, j] = test_res['loss']
+
+        run_time = time.time() - start_time
+        values = [i, t, train_loss[i, j], train_acc[i, j], test_loss[i, j], test_acc[i, j], run_time]
+        table = tabulate.tabulate([values], columns, tablefmt='simple', floatfmt='8.4f')
+        if j == 0:
+            table = table.split('\n')
+            table = '\n'.join([table[1]] + table)
+        else:
+            table = table.split('\n')[2]
+        print(table)
 
 np.savez(
     args.save_path,

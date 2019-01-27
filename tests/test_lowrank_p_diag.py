@@ -99,7 +99,6 @@ class Test_LowRank_P_Diag(unittest.TestCase):
         #N(1, DD' + diag(A))
         lazydist = MultivariateNormal(mean, lowrank_pdiag_lt)
         lazy_lprob = lazydist.log_prob(z)
-        #print(lowrank_pdiag_lt.log_det(), -0.5 * torch.dot(z.double(), lowrank_pdiag_lt.inv_matmul(z.double())))
 
         #exact log probability with Cholesky decomposition
         exact_dist = torch.distributions.MultivariateNormal(mean, lowrank_pdiag_lt.evaluate().float())

@@ -11,10 +11,6 @@ else:
     with open(os.path.join(_here, 'README.rst'), encoding='utf-8') as f:
         long_description = f.read()
 
-"""version = {}
-with open(os.path.join(_here, 'somepackage', 'version.py')) as f:
-    exec(f.read(), version)"""
-
 setup(
     name='swag',
     version='0.0',
@@ -22,15 +18,22 @@ setup(
     long_description=long_description,
     author='Wesley Maddox, Timur Garipov, Pavel Izmailov, Dmitry Vetrov, Andrew Gordon Wilson',
     author_email='wm326@cornell.edu',
-    url='https://github.com/wjmaddox/private_swa_uncertainties',
+    url='https://github.com/wjmaddox/swa_gaussian',
     license='MPL-2.0',
     packages=['swag'],
    install_requires=[
-       'torch>=1.0.0',
-       'gpytorch'
+        'tqdm==4.26.0',
+        'numpy>=1.14.3',
+        'torchvision>=0.2.1',
+        'gpytorch>=0.1.0rc4',
+        'tabulate>=0.8.2',
+        'scipy>=1.1.0',
+        'setuptools>=39.1.0',
+        'matplotlib>=2.2.2',
+        'torch>=1.0.0',
+        'Pillow>=5.4.1',
+        'scikit_learn>=0.20.2',
    ],
-#   no scripts in this example
-#   scripts=['bin/a-script'],
     include_package_data=True,
     classifiers=[
         'Development Status :: 0',
