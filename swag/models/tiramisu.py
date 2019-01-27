@@ -147,6 +147,9 @@ class FCDenseNet57:
     ft_joint_transform = JointCompose([
         JointRandomHorizontalFlip()
     ])
+    target_transform = transforms.Compose([
+        LabelToLongTensor(),
+    ])
 
 class FCDenseNet67:
     base = FCDenseNet
@@ -208,3 +211,6 @@ class FCDenseNet103:
         JointRandomHorizontalFlip()
     ])
 
+    target_transform = transforms.Compose([
+        LabelToLongTensor(),
+    ])
