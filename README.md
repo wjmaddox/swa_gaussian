@@ -71,14 +71,15 @@ Unless otherwise described, all experiments were run on a single GPU.
 
 Some other commands are listed here:
 
-Hessian maximum and minimum eigenvalue command:
+*Hessian eigenvalues*
 
 ```cd experiments/hessian_eigs; python run_hess_eigs.py --dataset CIFAR100 --data_path [data_path] --model PreResNet110 --use_test --file [ckpt] --save_path [output.npz] ```
 
-Gradient covariance experiment:
+*Gradient covariances*
 
 ```cd experiments/grad_cov; python run_grad_cov.py --dataset CIFAR100 --data_path [data_path] --model VGG16 --use_test --epochs=300 --lr_init=0.05 --wd=5e-4 --swa --swa_start 161 --swa_lr=0.01 --grad_cov_start 251 --dir [dir] ```
 
+Note that this will output the gradient covariances onto the console, so you ought to write these into a log file and retrieve them afterwards.
 
 ## References for Code Base
 
