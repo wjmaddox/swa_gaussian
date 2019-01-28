@@ -70,4 +70,4 @@ print('Minimum eigenvalue: ', min_eval)
 print('Number of Hessian vector products: ', hvps)
 
 print('Saving all eigenvalues to ', args.save_path)
-np.savez(args.save_path, pos_evals=pos_evals, neg_evals=neg_evals)
+np.savez(args.save_path, pos_evals=pos_evals.cpu().numpy(), neg_evals=neg_evals.cpu().numpy())

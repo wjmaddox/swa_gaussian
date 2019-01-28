@@ -85,7 +85,7 @@ model_cfg = getattr(models, args.model)
 loaders, num_classes = data.loaders(args.dataset, args.data_path, args.batch_size, args.num_workers, ft_batch_size=args.ft_batch_size, 
                     transform_train=model_cfg.transform_train, transform_test=model_cfg.transform_test, 
                     joint_transform=model_cfg.joint_transform, ft_joint_transform=model_cfg.ft_joint_transform,
-                    )
+                    target_transform=model_cfg.target_transform)
 print('Beginning with cropped images')
 train_loader = loaders['train']
 

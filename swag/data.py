@@ -3,7 +3,6 @@ import torch
 import torchvision
 import os
 
-#from .regression_data import generate_boston, generate_boston
 from .camvid import CamVid
 
 c10_classes = np.array([
@@ -17,11 +16,11 @@ def camvid_loaders(path, batch_size, num_workers, transform_train, transform_tes
 
     #load training and finetuning datasets
     print(path)
-    train_set = CamVid(root=path, split='train', joint_transform=joint_transform, transform=transform_train)
-    ft_train_set = CamVid(root=path, split='train', joint_transform=ft_joint_transform, transform=transform_train)
+    train_set = CamVid(root=path, split='train', joint_transform=joint_transform, transform=transform_train, **kwargs)
+    ft_train_set = CamVid(root=path, split='train', joint_transform=ft_joint_transform, transform=transform_train, **kwargs)
 
-    val_set = CamVid(root=path, split='val', joint_transform=None, transform=transform_test)
-    test_set = CamVid(root=path, split='test', joint_transform=None, transform=transform_test)
+    val_set = CamVid(root=path, split='val', joint_transform=None, transform=transform_test, **kwargs)
+    test_set = CamVid(root=path, split='test', joint_transform=None, transform=transform_test, **kwargs)
 
     num_classes = 11 # hard coded labels ehre
     
@@ -98,22 +97,13 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
             **kwargs):
 
     regression_problem = False
-    try:
-        ds = getattr(torchvision.datasets, dataset)
-    except:
-        if dataset == 'toy_regression':
-            ds = generate_toy_problem
-            regression_problem = True
-        if dataset == 'boston':
-            ds = generate_boston
-            regression_problem = True
-            
-
     if dataset == 'CamVid':
         return camvid_loaders(path, batch_size=batch_size, num_workers=num_workers, transform_train=transform_train, 
                         transform_test=transform_test, use_validation=use_validation, val_size=val_size, **kwargs)
 
     path = os.path.join(path, dataset.lower())
+    
+    ds = getattr(torchvision.datasets, dataset)            
 
     if dataset == 'SVHN':
         return svhn_loaders(path, batch_size, num_workers, transform_train, transform_test, use_validation, val_size)
