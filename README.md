@@ -14,7 +14,7 @@ The key idea of SWAG is that the SGD iterates act like samples from a Gaussian d
 In this repo, we implement SWAG for image classification with several different architectures on both CIFAR datasets and ImageNet. We also implement SWAG for semantic segmentation on CamVid using our implementation of a FCDenseNet67.
 Additionally included are several other experiments on exploring the covariance of the gradients of the SGD iterates, the eigenvalues of the Hessian, and width/PCA decompositions of the SWAG approximate posterior.
 
-![image](plots/stl_wrn.jpeg)
+![image](plots/stl_wrn.jpg)
 
 Please cite our work if you find it useful:
 ```
