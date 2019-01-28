@@ -51,12 +51,6 @@ Tiramisu adopts the UNet design with downsampling, bottleneck, and upsampling pa
 
 ![](docs/fcdensenet103_arch.png)
 
-## Authors' Results
-
-![Authors Results on CamVid](docs/authors_results_table.png)
-
-![Authors Results on CamVid](docs/authors_resuls.png)
-
 ## Our Results
 
 **FCDenseNet67**
