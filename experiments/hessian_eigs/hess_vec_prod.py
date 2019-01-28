@@ -17,37 +17,10 @@ from swag.utils import flatten, unflatten_like
 ################################################################################
 #                              Supporting Functions
 ################################################################################
-def npvec_to_tensorlist(vec, params):
-    """ Convert a numpy vector to a list of tensor with the same dimensions as params
-        Args:
-            vec: a 1D numpy vector
-            params: a list of parameters from net
-        Returns:
-            rval: a list of tensors with the same shape as params
-    """
-    loc = 0
-    rval = []
-    for p in params:
-        numel = p.data.numel()
-        rval.append(torch.from_numpy(vec[loc:loc+numel]).view(p.data.shape).float())
-        loc += numel
-    assert loc == vec.size, 'The vector has more elements than the net has parameters'
-    return rval
-
-
-def gradtensor_to_npvec(net, include_bn=False):
-    """ Extract gradients from net, and return a concatenated numpy vector.
-        Args:
-            net: trained model
-            include_bn: If include_bn, then gradients w.r.t. BN parameters and bias
-            values are also included. Otherwise only gradients with dim > 1 are considered.
-        Returns:
-            a concatenated numpy vector containing all gradients
-    """
-    filter = lambda p: include_bn or len(p.data.size()) > 1
-    return np.concatenate([p.grad.data.cpu().numpy().ravel() for p in net.parameters() if filter(p)])
-
 def gradtensor_to_tensor(net, include_bn=False):
+    """
+        convert the grad tensors to a list
+    """
     filter = lambda p: include_bn or len(p.data.size()) > 1
     return flatten([p.grad.data for p in net.parameters() if filter(p)])
 
