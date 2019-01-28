@@ -34,6 +34,14 @@ Unless otherwise described, all experiments were run on a single GPU.
 
 ### Example Commands
 
+**See experiments/* for particular READMEs**
+
+[Image Classification](experiments/train/README.md)
+[Segmentation](experiments/segmentation/README.md)
+[Uncertainty](experiments/uncertainty/README.md)
+
+Some other commands are listed here:
+
 Hessian maximum and minimum eigenvalue command:
 
 ```cd experiments/hessian_eigs; python run_hess_eigs.py --dataset CIFAR100 --data_path [data_path] --model PreResNet110 --use_test --file [ckpt] --save_path [output.npz] ```
