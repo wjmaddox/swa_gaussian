@@ -1,6 +1,7 @@
 """
     compute hessian vector products as well as eigenvalues of the hessian
     # copied from https://github.com/tomgoldstein/loss-landscape/blob/master/hess_vec_prod.py
+    # code re-written to use gpu by default and then to use gpytorch
 """
 
 import torch
@@ -8,7 +9,7 @@ import time
 import numpy as np
 from torch import nn
 from torch.autograd import Variable
-from scipy.sparse.linalg import LinearOperator, eigsh
+
 from gpytorch.utils.lanczos import lanczos_tridiag, lanczos_tridiag_to_diag
 
 from swag.utils import flatten, unflatten_like
@@ -93,29 +94,6 @@ def eval_hess_vec_prod(vec, params, net, criterion, dataloader, use_cuda=False):
         # accumulate the gradients into the params.grad attributes
         prod.backward()
 
-def power_method(matmul_closure, N, tolerance, max_steps, dtype, device):
-    q_initial = torch.randn(N, 1, dtype = dtype, device = device)
-    q_initial = q_initial / q_initial.norm()
-    lambda_old = 1e10
-
-    A_m_qcurr = matmul_closure(q_initial)
-    for i in range(max_steps):
-        #z_current = hess_vec_prod(q_current)
-        z_current = A_m_qcurr
-        q_current = z_current / z_current.norm()
-
-        A_m_qcurr = matmul_closure(q_current)
-        lambda_current = q_current.t().matmul(A_m_qcurr)
-        
-        if (lambda_current - lambda_old).norm() < tolerance:
-            print('Convergence: ', lambda_current)
-            break
-        else:
-            print('Step: ', i, lambda_current)
-        
-        lambda_old = lambda_current
-
-    return lambda_current
 ################################################################################
 #                  For computing Eigenvalues of Hessian
 ################################################################################
@@ -140,25 +118,21 @@ def min_max_hessian_eigs(net, dataloader, criterion, rank=0, use_cuda=False, ver
 
     def hess_vec_prod(vec):
         hess_vec_prod.count += 1  # simulates a static variable
-        #print(vec, vec.dtype, vec.device)
-        #vec = npvec_to_tensorlist(vec, params)
         vec = unflatten_like(vec.t(), params)
 
         start_time = time.time()
         eval_hess_vec_prod(vec, params, net, criterion, dataloader, use_cuda)
         prod_time = time.time() - start_time
         if verbose and rank == 0: print("   Iter: %d  time: %f" % (hess_vec_prod.count, prod_time))
-        #return gradtensor_to_npvec(net)
         out = gradtensor_to_tensor(net)
         return out.unsqueeze(1)
 
     hess_vec_prod.count = 0
     if verbose and rank == 0: print("Rank %d: computing max eigenvalue" % rank)
 
-    #A = LinearOperator((N, N), matvec=hess_vec_prod)
-    #pos_eigvals, _ = eigsh(A, k=1, tol=1e-2)
-    #maxeig = power_method(hess_vec_prod, N, 1e-2, 40, device = params[0].device, dtype = params[0].dtype)
+    # use lanczos to get the t and q matrices out
     _, pos_t_mat = lanczos_tridiag(hess_vec_prod, 100, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
+    # convert the tridiagonal t matrix to the eigenvalues
     pos_eigvals, _ = lanczos_tridiag_to_diag(pos_t_mat)
     print(pos_eigvals)
     # eigenvalues may not be sorted
@@ -177,21 +151,14 @@ def min_max_hessian_eigs(net, dataloader, criterion, rank=0, use_cuda=False, ver
         hvp = hess_vec_prod(vec)
         return -hvp + shift*vec
     
-    shifted_hvp_numpy = lambda x: shifted_hess_vec_prod(torch.tensor(x).float().cuda().unsqueeze(1)).squeeze(1).cpu().numpy()
-
-
     if verbose and rank == 0: print("Rank %d: Computing shifted eigenvalue" % rank)
 
-    """A = LinearOperator((N, N), matvec=shifted_hvp_numpy)
-    neg_eigvals, _ = eigsh(A, k=1, tol=1e-2)
-    mineig = neg_eigvals[0]
-    print(- neg_eigvals + shift)"""
+    # now run lanczos on the shifted eigenvalues
     _, neg_t_mat = lanczos_tridiag(shifted_hess_vec_prod, 200, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
     neg_eigvals, _ = lanczos_tridiag_to_diag(neg_t_mat)
     mineig = torch.max(neg_eigvals)
     print(neg_eigvals)
-    #mineig = neg_eigvals[0]"""
-    #mineig = power_method(shifted_hess_vec_prod, N, 1e-3, 300, device = params[0].device, dtype = params[0].dtype)
+
     mineig = -mineig + shift
     print(mineig)
     if verbose and rank == 0: print('min eigenvalue = ' + str(mineig))
