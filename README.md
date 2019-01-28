@@ -1,6 +1,32 @@
 # A Simple and Effective Baseline for Bayesian DNNs
 
-Installation:
+This repository contains a PyTorch implementation of Stochastic Weight Averaging-Gaussian (SWAG) from the paper
+-------
+
+by Wesley Maddox, Timur Garipov, Pavel Izmailov, Dmitry Vetrov, and Andrew Gordon Wilson
+
+## Introduction
+
+SWA-Gaussian (SWAG) is a simple method for Bayesian deep learning that can be used as a drop-in replacement for SWA and the standard SGD training procedure (as long as some sort of regularization is used).
+The key idea of SWAG is that the SGD iterates act like samples from a Gaussian distribution; SWAG fits this Gaussian distribution by capturing the SWA mean and a covariance matrix.
+
+In this repo, we implement SWAG for image classification with several different architectures on both CIFAR datasets and ImageNet. We also implement SWAG for semantic segmentation on CamVid using our implementation of a FCDenseNet67.
+Additionally included are several other experiments on exploring the covariance of the gradients of the SGD iterates, the eigenvalues of the Hessian, and width/PCA decompositions of the SWAG approximate posterior.
+
+**Include width plot here**
+
+Please cite our work if you find it useful:
+```
+@article{maddoxfast,
+  title={Fast Uncertainty Estimates and Bayesian Model Averaging of DNNs},
+  author={Maddox, Wesley and Garipov, Timur and Izmailov, Pavel and Vetrov, Dmitry and Wilson, Andrew Gordon},
+  journal={UAI Workshop on Uncertainty in Deep Learning},
+  year={2018}
+}
+```
+
+## Installation:
+
 ```bash
 python setup.py develop
 ```
@@ -66,7 +92,3 @@ Model implementations:
 Hessian eigenvalue computation: [PyTorch repo](https://github.com/tomgoldstein/loss-landscape), but we ultimately ended up using [GPyTorch](https://gpytorch.ai) as it allows calculation of more eigenvalues.
 
 Segmentation evaluation metrics: [Lasagne repo](https://github.com/SimJeg/FC-DenseNet/blob/master/metrics.py)
-
-## Figures 
-
-<!b ToDo -->
