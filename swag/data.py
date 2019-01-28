@@ -99,8 +99,10 @@ def loaders(dataset, path, batch_size, num_workers, transform_train, transform_t
     if dataset == 'CamVid':
         return camvid_loaders(path, batch_size=batch_size, num_workers=num_workers, transform_train=transform_train, 
                         transform_test=transform_test, use_validation=use_validation, val_size=val_size, **kwargs)
-    else:
-        path = os.path.join(path, dataset.lower())
+
+    path = os.path.join(path, dataset.lower())
+    
+    ds = getattr(torchvision.datasets, dataset)            
 
     if dataset == 'SVHN':
         return svhn_loaders(path, batch_size, num_workers, transform_train, transform_test, use_validation, val_size)

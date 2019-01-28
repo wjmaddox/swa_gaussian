@@ -12,19 +12,7 @@ import gpytorch
 from gpytorch.lazy import RootLazyTensor, DiagLazyTensor, AddedDiagLazyTensor
 from gpytorch.distributions import MultivariateNormal
 
-from ..utils import flatten
-
-def unflatten_like(vector, likeTensorList):
-    # Takes a flat torch.tensor and unflattens it to a list of torch.tensors
-    #    shaped like likeTensorList
-    outList = []
-    i=0
-    for tensor in likeTensorList:
-        #n = module._parameters[name].numel()
-        n = tensor.numel()
-        outList.append(vector[:,i:i+n].view(tensor.shape))
-        i+=n
-    return outList
+from ..utils import flatten, unflatten_like
 
 def swag_parameters(module, params, no_cov_mat=True):
     for name in list(module._parameters.keys()):
