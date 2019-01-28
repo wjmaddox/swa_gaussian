@@ -37,7 +37,9 @@ Unless otherwise described, all experiments were run on a single GPU.
 **See experiments/* for particular READMEs**
 
 [Image Classification](experiments/train/README.md)
+
 [Segmentation](experiments/segmentation/README.md)
+
 [Uncertainty](experiments/uncertainty/README.md)
 
 Some other commands are listed here:
