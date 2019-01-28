@@ -3,18 +3,24 @@ PyTorch implementation of [The One Hundred Layers Tiramisu: Fully Convolutional 
 
 Tiramisu combines [DensetNet](https://arxiv.org/abs/1608.06993) and [U-Net](https://arxiv.org/abs/1505.04597) for high performance semantic segmentation. In this repository, we attempt to replicate the authors' results on the CamVid dataset.
 
-## Setup
+## Commands
 
-Requires Anaconda for Python3 installed.
+  - train SWAG model
 
-```
-conda create --name tiramisu python=3.6
-source activate tiramisu
-conda install pytorch torchvision -c pytorch
-```
+  ```python train.py --data_path [data_path] --model FCDenseNet67 --loss cross_entropy --optimizer SGD --lr_init 1e-2 --batch_size 4 --ft_start 750 --ft_batch_size 1 --epochs 1000 --swa --swa_start=850 --swa_lr=1e-3 --dir [dir] ```
 
-The ```train.ipynb``` notebook shows a basic train/test workflow.
-
+  - train SGD model
+  
+  ```python train.py --data_path [data_path] --model FCDenseNet67 --loss cross_entropy --optimizer SGD --lr_init 1e-2 --batch_size 4 --ft_start 750 --ft_batch_size 1 --epochs 1000 --dir [dir] ```
+  
+  - run MC Dropout at test time
+  
+  ```python eval_ensemble.py --data_path [data_path] --batch_size 4 --method Dropout --loss cross_entropy --N 50 --file [sgd_checkpoint] --save_path [output.npz] ```
+  
+  - run SWAG at test time
+  
+  ```python eval_ensemble.py --data_path [data_path] --batch_size 4 --method SWAG --scale=0.5 --loss cross_entropy --N 50 --file [swag_checkpoint] --save_path [output.npz] ```
+  
 ## Dataset
 
 Download
@@ -55,29 +61,13 @@ Tiramisu adopts the UNet design with downsampling, bottleneck, and upsampling pa
 
 **FCDenseNet67**
 
-We trained for 670 epochs (224x224 crops) with 100 epochs fine-tuning (full-size images). The authors mention "global accuracy" of 90.8 for FC-DenseNet67 on Camvid, compared to our 86.8. If we exclude the 'background' class, accuracy increases to ~89%. We think the authors did this, but haven't confirmed. 
+**FIX ME**
 
 | Dataset     | Loss  | Accuracy |
 | ----------- |:-----:| --------:|
 | Validation  | .209  | 92.5     |
 | Testset     | .435  | 86.8     |
 
-![Our Results on CamVid](docs/fcdensenet67_trainin_error.png)
-
-**FCDenseNet103**
-
-We trained for 874 epochs with 50 epochs fine-tuning.
-
-| Dataset     | Loss  | Accuracy |
-| ----------- |:-----:| --------:|
-| Validation  | .178  | 92.8     |
-| Testset     | .441  | 86.6     |
-
-![Our Results on CamVid](docs/tiramisu-103-loss-error.png)
-
-**Predictions**
-
-![Our Results on CamVid](docs/example_output.png)
 
 ## Training
 
@@ -95,7 +85,8 @@ We trained for 874 epochs with 50 epochs fine-tuning.
 
 ## References and Links
 
-* [Project Thread](http://forums.fast.ai/t/one-hundred-layers-tiramisu/2266)
+* [bfortuner's repo](https://github.com/bfortuner/pytorch_tiramisu)
+* [FastAI Project Thread](http://forums.fast.ai/t/one-hundred-layers-tiramisu/2266)
 * [Author's Implementation](https://github.com/SimJeg/FC-DenseNet)
 * https://github.com/bamos/densenet.pytorch
 * https://github.com/liuzhuang13/DenseNet
