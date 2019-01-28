@@ -69,7 +69,7 @@ Model implementations:
   - WideResNet: https://github.com/meliketoy/wide-resnet.pytorch
   - FCDensenet67: https://github.com/bfortuner/pytorch_tiramisu
 
-Hessian eigenvalue computation: [PyTorch repo](https://github.com/tomgoldstein/loss-landscape)
+Hessian eigenvalue computation: [PyTorch repo](https://github.com/tomgoldstein/loss-landscape), but we ultimately ended up using [GPyTorch](https://gpytorch.ai) as it allows calculation of more eigenvalues.
 
 Segmentation evaluation metrics: [Lasagne repo](https://github.com/SimJeg/FC-DenseNet/blob/master/metrics.py)
 
