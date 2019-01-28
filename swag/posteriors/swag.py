@@ -175,7 +175,6 @@ class SWAG(torch.nn.Module):
         if not self.no_cov_mat:
             n_models = state_dict['n_models'].item()
             rank = min(n_models, self.max_num_models)
-            print(rank)
             for module, name in self.params:
                 mean = module.__getattr__('%s_mean' % name)
                 module.__setattr__('%s_cov_mat_sqrt' % name, mean.new_empty((rank, mean.numel())).zero_())
