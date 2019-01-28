@@ -75,7 +75,7 @@ swag_nlls = np.zeros(args.N)
 
 columns = ['fraction', 'swa_acc', 'swa_loss', 'swag_acc', 'swag_loss', 'time']
 
-for i, fraction in enumerate(fractions[-2:]):
+for i, fraction in enumerate(fractions):
     start_time = time.time()
     swag_model.load_state_dict(ckpt['state_dict'])
 
