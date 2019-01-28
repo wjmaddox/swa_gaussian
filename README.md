@@ -1,7 +1,8 @@
 # A Simple and Effective Baseline for Bayesian DNNs
 
 This repository contains a PyTorch implementation of Stochastic Weight Averaging-Gaussian (SWAG) from the paper
--------
+
+Fast Uncertainty Estimates and Bayesian Model Averaging of DNNs
 
 by Wesley Maddox, Timur Garipov, Pavel Izmailov, Dmitry Vetrov, and Andrew Gordon Wilson
 
