@@ -142,7 +142,7 @@ for i in range(args.N):
         targets[k:(k+target.size(0)), :, :] = target.numpy()
         k += input.size(0)
 
-    np.savez(args.save_path+'pred_'+str(i), predictions = current_predictions)
+    #np.savez(args.save_path+'pred_'+str(i), predictions = current_predictions)
 
     print(np.mean(np.argmax(predictions, axis=1) == targets))
 predictions /= args.N
