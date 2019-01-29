@@ -75,17 +75,6 @@ def _make_dataset(dir):
     return images
 
 
-class LabelToLongTensor(object):
-    def __call__(self, pic):
-        if isinstance(pic, np.ndarray):
-            # handle numpy array
-            label = torch.from_numpy(pic).long()
-        else:
-            label = torch.ByteTensor(torch.ByteStorage.from_buffer(pic.tobytes()))
-            label = label.view(pic.size[1], pic.size[0], 1)
-            label = label.transpose(0, 1).transpose(0, 2).squeeze().contiguous().long()
-        return label
-
 
 class LabelTensorToPILImage(object):
     def __call__(self, label):
@@ -108,7 +97,7 @@ class LabelTensorToPILImage(object):
 class CamVid(data.Dataset):
 
     def __init__(self, root, split='train', joint_transform=None,
-                 transform=None, target_transform=LabelToLongTensor(),
+                 transform=None, target_transform=None,
                  download=False,
                  loader=default_loader):
         self.root = root
@@ -137,12 +126,15 @@ class CamVid(data.Dataset):
         target = Image.open(path.replace(self.split, self.split + 'annot'))
 
         if self.joint_transform is not None:
-            img, target = self.joint_transform([img, target])
+            img, target = self.joint_transform(img, target)
 
         if self.transform is not None:
             img = self.transform(img)
 
-        target = self.target_transform(target)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        #print(img.size(), target.size())
         return img, target
 
     def __len__(self):

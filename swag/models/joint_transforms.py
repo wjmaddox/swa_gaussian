@@ -11,131 +11,84 @@ import numpy as np
 import numbers
 import types
 
-class JointScale(object):
-    """Rescales the input PIL.Image to the given 'size'.
-    'size' will be the size of the smaller edge.
-    For example, if height > width, then image will be
-    rescaled to (size * height / width, size)
-    size: size of the smaller edge
-    interpolation: Default: PIL.Image.BILINEAR
+import torchvision.transforms.functional as TF
+
+_pil_interpolation_to_str = {
+    Image.NEAREST: 'PIL.Image.NEAREST',
+    Image.BILINEAR: 'PIL.Image.BILINEAR',
+    Image.BICUBIC: 'PIL.Image.BICUBIC',
+    Image.LANCZOS: 'PIL.Image.LANCZOS',
+}
+
+class JointCompose(object):
+    """Composes several transforms together.
+
+    Args:
+        transforms (list of ``Transform`` objects): list of transforms to compose.
+
+    Example:
+        >>> transforms.Compose([
+        >>>     transforms.CenterCrop(10),
+        >>>     transforms.ToTensor(),
+        >>> ])
     """
 
-    def __init__(self, size, interpolation=Image.BILINEAR):
-        self.size = size
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, img, segmentation):
+        for t in self.transforms:
+            img, segmentation = t(img, segmentation)
+        return img, segmentation
+
+    def __repr__(self):
+        format_string = self.__class__.__name__ + '('
+        for t in self.transforms:
+            format_string += '\n'
+            format_string += '    {0}'.format(t)
+        format_string += '\n)'
+        return format_string
+
+class JointRandomResizedCrop(object):
+    """Crop the given PIL Image to random size and aspect ratio.
+
+    A crop of random size (default: of 0.08 to 1.0) of the original size and a random
+    aspect ratio (default: of 3/4 to 4/3) of the original aspect ratio is made. This crop
+    is finally resized to given size.
+    This is popularly used to train the Inception networks.
+
+    This is copied from pytorch RandomResizedCrop
+
+    Args:
+        size: expected output size of each edge
+        scale: range of size of the origin size cropped
+        ratio: range of aspect ratio of the origin aspect ratio cropped
+        interpolation: Default: PIL.Image.BILINEAR
+    """
+
+    def __init__(self, size, scale=(0.08, 1.0), ratio=(3. / 4., 4. / 3.), interpolation=Image.BILINEAR):
+        self.size = (size, size)
         self.interpolation = interpolation
+        self.scale = scale
+        self.ratio = ratio
 
-    def __call__(self, imgs):
-        w, h = imgs[0].size
-        if (w <= h and w == self.size) or (h <= w and h == self.size):
-            return imgs
-        if w < h:
-            ow = self.size
-            oh = int(self.size * h / w)
-            return [img.resize((ow, oh), self.interpolation) for img in imgs]
-        else:
-            oh = self.size
-            ow = int(self.size * w / h)
-            return [img.resize((ow, oh), self.interpolation) for img in imgs]
+    @staticmethod
+    def get_params(img, scale, ratio):
+        """Get parameters for ``crop`` for a random sized crop.
 
+        Args:
+            img (PIL Image): Image to be cropped.
+            scale (tuple): range of size of the origin size cropped
+            ratio (tuple): range of aspect ratio of the origin aspect ratio cropped
 
-class JointCenterCrop(object):
-    """Crops the given PIL.Image at the center to have a region of
-    the given size. size can be a tuple (target_height, target_width)
-    or an integer, in which case the target will be of a square shape (size, size)
-    """
-
-    def __init__(self, size):
-        if isinstance(size, numbers.Number):
-            self.size = (int(size), int(size))
-        else:
-            self.size = size
-
-    def __call__(self, imgs):
-        w, h = imgs[0].size
-        th, tw = self.size
-        x1 = int(round((w - tw) / 2.))
-        y1 = int(round((h - th) / 2.))
-        return [img.crop((x1, y1, x1 + tw, y1 + th)) for img in imgs]
-
-
-class JointPad(object):
-    """Pads the given PIL.Image on all sides with the given "pad" value"""
-
-    def __init__(self, padding, fill=0):
-        assert isinstance(padding, numbers.Number)
-        assert isinstance(fill, numbers.Number) or isinstance(fill, str) or isinstance(fill, tuple)
-        self.padding = padding
-        self.fill = fill
-
-    def __call__(self, imgs):
-        return [ImageOps.expand(img, border=self.padding, fill=self.fill) for img in imgs]
-
-
-class JointLambda(object):
-    """Applies a lambda as a transform."""
-
-    def __init__(self, lambd):
-        assert isinstance(lambd, types.LambdaType)
-        self.lambd = lambd
-
-    def __call__(self, imgs):
-        return [self.lambd(img) for img in imgs]
-
-
-class JointRandomCrop(object):
-    """Crops the given list of PIL.Image at a random location to have a region of
-    the given size. size can be a tuple (target_height, target_width)
-    or an integer, in which case the target will be of a square shape (size, size)
-    """
-
-    def __init__(self, size, padding=0):
-        if isinstance(size, numbers.Number):
-            self.size = (int(size), int(size))
-        else:
-            self.size = size
-        self.padding = padding
-
-    def __call__(self, imgs):
-        if self.padding > 0:
-            imgs = [ImageOps.expand(img, border=self.padding, fill=0) for img in imgs]
-
-        w, h = imgs[0].size
-        th, tw = self.size
-        if w == tw and h == th:
-            return imgs
-
-        x1 = random.randint(0, w - tw)
-        y1 = random.randint(0, h - th)
-        return [img.crop((x1, y1, x1 + tw, y1 + th)) for img in imgs]
-
-
-class JointRandomHorizontalFlip(object):
-    """Randomly horizontally flips the given list of PIL.Image with a probability of 0.5
-    """
-
-    def __call__(self, imgs):
-        if random.random() < 0.5:
-            return [img.transpose(Image.FLIP_LEFT_RIGHT) for img in imgs]
-        return imgs
-
-
-class JointRandomSizedCrop(object):
-    """Random crop the given list of PIL.Image to a random size of (0.08 to 1.0) of the original size
-    and and a random aspect ratio of 3/4 to 4/3 of the original aspect ratio
-    This is popularly used to train the Inception networks
-    size: size of the smaller edge
-    interpolation: Default: PIL.Image.BILINEAR
-    """
-
-    def __init__(self, size, interpolation=Image.BILINEAR):
-        self.size = size
-        self.interpolation = interpolation
-
-    def __call__(self, imgs):
+        Returns:
+            tuple: params (i, j, h, w) to be passed to ``crop`` for a random
+                sized crop.
+        """
         for attempt in range(10):
-            area = imgs[0].size[0] * imgs[0].size[1]
-            target_area = random.uniform(0.08, 1.0) * area
-            aspect_ratio = random.uniform(3. / 4, 4. / 3)
+            area = img.size[0] * img.size[1]
+            target_area = random.uniform(*scale) * area
+            aspect_ratio = random.uniform(*ratio)
 
             w = int(round(math.sqrt(target_area * aspect_ratio)))
             h = int(round(math.sqrt(target_area / aspect_ratio)))
@@ -143,16 +96,57 @@ class JointRandomSizedCrop(object):
             if random.random() < 0.5:
                 w, h = h, w
 
-            if w <= imgs[0].size[0] and h <= imgs[0].size[1]:
-                x1 = random.randint(0, imgs[0].size[0] - w)
-                y1 = random.randint(0, imgs[0].size[1] - h)
-
-                imgs = [img.crop((x1, y1, x1 + w, y1 + h)) for img in imgs]
-                assert(imgs[0].size == (w, h))
-
-                return [img.resize((self.size, self.size), self.interpolation) for img in imgs]
+            if w <= img.size[0] and h <= img.size[1]:
+                i = random.randint(0, img.size[1] - h)
+                j = random.randint(0, img.size[0] - w)
+                return i, j, h, w
 
         # Fallback
-        scale = JointScale(self.size, interpolation=self.interpolation)
-        crop = JointCenterCrop(self.size)
-        return crop(scale(imgs))
+        w = min(img.size[0], img.size[1])
+        i = (img.size[1] - w) // 2
+        j = (img.size[0] - w) // 2
+        return i, j, w, w
+
+    def __call__(self, img, segmentation):
+        """
+        Args:
+            img (PIL Image): Image to be cropped and resized.
+            segmentation (PIL Image): Image that is a segmentation to be cropped and resized.
+
+        Returns:
+            PIL Image: Randomly cropped and resized image.
+            PIL Image: Randomly cropped and resized image.
+        """
+        i, j, h, w = self.get_params(img, self.scale, self.ratio)
+        img = TF.resized_crop(img, i, j, h, w, self.size, self.interpolation)
+        segmentation = TF.resized_crop(segmentation, i, j, h, w, self.size, self.interpolation)
+        return img, segmentation
+
+    def __repr__(self):
+        interpolate_str = _pil_interpolation_to_str[self.interpolation]
+        format_string = self.__class__.__name__ + '(size={0}'.format(self.size)
+        format_string += ', scale={0}'.format(tuple(round(s, 4) for s in self.scale))
+        format_string += ', ratio={0}'.format(tuple(round(r, 4) for r in self.ratio))
+        format_string += ', interpolation={0})'.format(interpolate_str)
+        return format_string
+
+class JointRandomHorizontalFlip(object):
+    """Randomly horizontally flips the given list of PIL.Image with a probability of 0.5
+    """
+
+    def __call__(self, image, segmentation):
+        if random.random() < 0.5:
+            image = TF.hflip(image)
+            segmentation = TF.hflip(segmentation)
+        return image, segmentation
+
+class LabelToLongTensor(object):
+    def __call__(self, pic):
+        if isinstance(pic, np.ndarray):
+            # handle numpy array
+            label = torch.from_numpy(pic).long()
+        else:
+            label = torch.ByteTensor(torch.ByteStorage.from_buffer(pic.tobytes()))
+            label = label.view(pic.size[1], pic.size[0], 1)
+            label = label.transpose(0, 1).transpose(0, 2).squeeze().contiguous().long()
+        return label
