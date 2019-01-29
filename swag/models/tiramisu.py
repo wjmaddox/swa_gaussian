@@ -161,11 +161,11 @@ class FCDenseNet67:
 
     transform_train = transforms.Compose([
           transforms.ToTensor(),
-          transforms.Normalize(mean=camvid_mean, std=camvid_std),
+          #transforms.Normalize(mean=camvid_mean, std=camvid_std),
     ])
     transform_test =  transforms.Compose([
           transforms.ToTensor(),
-          transforms.Normalize(mean=camvid_mean, std=camvid_std),
+          #transforms.Normalize(mean=camvid_mean, std=camvid_std),
     ])
 
     joint_transform = transforms.Compose([
@@ -189,11 +189,11 @@ class FCDenseNet103:
 
     transform_train = transforms.Compose([
           transforms.ToTensor(),
-          transforms.Normalize(mean=camvid_mean, std=camvid_std),
+          #transforms.Normalize(mean=camvid_mean, std=camvid_std),
     ])
     transform_test =  transforms.Compose([
           transforms.ToTensor(),
-          transforms.Normalize(mean=camvid_mean, std=camvid_std),
+          #transforms.Normalize(mean=camvid_mean, std=camvid_std),
     ])
 
     joint_transform = transforms.Compose([
