@@ -111,7 +111,8 @@ class CamVid(data.Dataset):
                  transform=None, target_transform=LabelToLongTensor(),
                  download=False,
                  loader=default_loader):
-        self.root = Path(root)
+        self.root = root
+        #self.root = Path(root)
         
         assert split in ('train', 'val', 'test')
         self.split = split
@@ -127,6 +128,7 @@ class CamVid(data.Dataset):
         if download:
             self.download()
 
+        #print(type(self.root))
         self.imgs = _make_dataset(os.path.join(self.root, self.split))
 
     def __getitem__(self, index):
