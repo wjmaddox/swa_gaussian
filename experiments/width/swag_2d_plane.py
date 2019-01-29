@@ -1,7 +1,5 @@
 import argparse
-import os
 import torch
-import torch.nn.functional as F
 import numpy as np
 import sklearn.decomposition
 import tabulate
@@ -80,17 +78,12 @@ for path in args.checkpoint:
     swag_model.collect_model(model)
     W.append(np.concatenate([p.detach().cpu().numpy().ravel() for p in model.parameters()]))
 W = np.array(W)
-print('Shape: %d %d' % (W.shape[0], W.shape[1]))
 
 mean, variances, cov_mat_list = swag_model.export_numpy_params(export_cov_mat=True)
 cov_mat = np.hstack([mat.reshape(args.swag_rank, -1) for mat in cov_mat_list])
 
 tsvd = sklearn.decomposition.TruncatedSVD(n_components=args.swag_rank, n_iter=7)
 tsvd.fit(cov_mat)
-print(tsvd.components_.shape)
-print(np.diag(np.dot(np.dot(tsvd.components_, cov_mat.T), np.dot(cov_mat, tsvd.components_.T))) / (cov_mat.shape[0] - 1))
-print(tsvd.explained_variance_)
-print(tsvd.explained_variance_ratio_ * 100.0)
 
 train_acc = np.zeros((args.N, args.N))
 train_loss = np.zeros((args.N, args.N))
@@ -105,7 +98,6 @@ v /= np.linalg.norm(v)
 ex_diag = np.sum(u * variances * u)
 ey_diag = np.sum(v * variances * v)
 exy_diag = np.sum(u * variances * v)
-print(ex_diag, ey_diag, exy_diag)
 E_diag = np.array([[ex_diag, exy_diag], [exy_diag, ey_diag]])
 
 ex = ex_diag + np.sum(np.square(np.dot(cov_mat, u))) / (cov_mat.shape[0] - 1)
@@ -116,7 +108,6 @@ E_cov = np.array([[ex, exy], [exy, ey]])
 dist_x = max(args.dist, 3.4 * np.sqrt(ex))
 dist_y = max(args.dist, 3.4 * np.sqrt(ey))
 dist = max(dist_x, dist_y)
-print(dist, dist_x, dist_y)
 
 component_variances = np.dot(np.dot(tsvd.components_, cov_mat.T), np.dot(cov_mat, tsvd.components_.T)) / (cov_mat.shape[0] - 1)
 
