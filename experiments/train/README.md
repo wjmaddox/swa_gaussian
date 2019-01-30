@@ -1,7 +1,7 @@
 ## Image Classification README
 
 The script `experiments/train/run_swag.py` allows to train SWA, SWAG and SGD models on CIFAR-10 and CIFAR-100. 
-The script and the following README are based on [the repo implementating SWA](https://github.com/timgaripov/swa).
+The script and the following README are based on [the repo implementing SWA](https://github.com/timgaripov/swa).
 
 To train SWAG use
 ```
@@ -86,7 +86,7 @@ python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=C
 
 ### Table of Results
 
-#### CIFAR10
+#### CIFAR10 NLL
 
 | DNN                       |  SGD        | SWA         |SWAG       | SWAG-Diagonal | SWA-Dropout | SWA-Temp |
 | ------------------------- |:-----------:|:-----------:|:---------:|:-------------:|:-----------:|:--------:|
