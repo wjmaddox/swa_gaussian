@@ -5,7 +5,7 @@ The script and the following README are based on [the repo implementing SWA](htt
 
 To train SWAG use
 ```
-python experiments/train/run_swag.py
+python experiments/train/run_swag.py \
       --dir=<DIR> \
       --dataset=<DATASET> \
       --data_path=<PATH> \
