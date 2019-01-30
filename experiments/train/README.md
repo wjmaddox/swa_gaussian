@@ -83,14 +83,13 @@ python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=C
 python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=CIFAR100 --save_freq=300 \
       --model=VGG16 --lr_init=0.05 --wd=5e-4 --use_test --dir=<DIR>
 ```
-### Explanation of some other options
-
-`--cov_mat` store covariance matrices with SWAG; default is SWAG-Diagonal
-
-`--swa` run SWAG
-
-`--split_classes` to train on only 5 of the 10 classes of CIFAR10 (either 0 or 1); all experiments on this use the same CIFAR10 hyper-parameters
 
 ### Table of Results
 
-**from paper**
+#### CIFAR10
+
+| DNN                       |  SGD        | SWA         |SWAG       | SWAG-Diagonal | SWA-Dropout | KFAC-Laplace | SWA-Temp |
+| ------------------------- |:-----------:|:-----------:|:---------:|:-------------:|:-----------:|:------------:|:--------:|
+| VGG16                     | 0.33 ± 0.01 | 0.26 ± 0.01 | 0.20 ± 0.0 | 0.22 ± 0.01 | 0.23 ± 0.0 | 0.23 ± 0.0 | 0.25 ± 0.02 | 
+| PreResNet164              | 0.18 ± 0.0  | 0.15 ± 0.00 | 0.12 ± 0.0 | 0.13 ± 0.0  | 0.13 ± 0.0 | 0.15 ± 0.0 | 0.13 ± 0.0 |
+| WideResNet28x10           | 0.13 ± 0.0  | 0.11 ± 0.00 | 0.11 ± 0.0 | 0.11 ± 0.0  | 0.11 ± 0.0 | 0.12 ± 0.0 | 0.11 ± 0.0 |
