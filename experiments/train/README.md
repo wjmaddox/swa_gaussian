@@ -1,21 +1,22 @@
 ## Image Classification README
 
-### Scripts to reproduce the results
+The scripts in `experiments/train/run_swag.py` allow to train SWA, SWAG and SGD models on CIFAR-10 and CIFAR-100. We list the scripts for reproducing the results from the paper below.
 
 PreResNet164:
 ```bash
 # SWAG, CIFAR100
-python experiments/train/run_swag.py --dataset=CIFAR100 --data_path=[data_path] --use_test --model=PreResNet164 \
-      --epochs=300 --lr_init=0.1 --wd=3e-4 --swa --swa_start=161 --swa_lr=0.05 --cov_mat --dir=[dir]
-# SWAG, CIFAR10, only difference is SWA start
-python experiments/train/run_swag.py --dataset=CIFAR10 --data_path=[data_path] --use_test --model=PreResNet164 --epochs=300 \
-      --lr_init=0.1 --wd=3e-4 --swa --swa_start=126 --swa_lr=0.05 --cov_mat --dir=[dir]
+python3 experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=CIFAR100 --save_freq=300 \
+      --model=PreResNet164 --lr_init=0.1 --wd=3e-4 --swa --swa_start=161 --swa_lr=0.05 --cov_mat --use_test \
+      --dir=<DIR>
 
-# SGD, CIFAR100
-python experiments/train/run_swag.py --dataset=[CIFAR10/CIFAR100] --data_path=[data_path] --model=PreResNet164 --epochs=300 \   
-      --lr_init=0.1 --wd=3e-4 --use_test --epochs 200
+# SWAG, CIFAR10
+python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=CIFAR10 --save_freq=300 \  
+      --model=PreResNet164 --lr_init=0.1 --wd=3e-4 --swa --swa_start=161 --swa_lr=0.01 --cov_mat --use_test \
+      --dir=<DIR>
+# SGD
+python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=CIFAR100 --save_freq=300 \
+      --model=PreResNet164 --lr_init=0.1 --wd=3e-4 --use_test --dir=<DIR>
 ```
-**@pavel: double check the sgd epochs here**
 
 WideResNet28x10:
 ```bash
