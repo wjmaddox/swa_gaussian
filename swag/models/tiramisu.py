@@ -175,7 +175,7 @@ class FCDenseNet67:
         JointRandomResizedCrop(224), # commented for fine-tuning
         JointRandomHorizontalFlip()
     ])
-    ft_joint_transform = transforms.Compose([
+    ft_joint_transform = JointCompose([
         JointRandomHorizontalFlip()
     ])
 
