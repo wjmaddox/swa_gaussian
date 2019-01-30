@@ -1,6 +1,7 @@
 ## Image Classification README
 
-The scripts in `experiments/train/run_swag.py` allow to train SWA, SWAG and SGD models on CIFAR-10 and CIFAR-100. 
+The script `experiments/train/run_swag.py` allows to train SWA, SWAG and SGD models on CIFAR-10 and CIFAR-100. 
+The script and the following README are based on [the repo implementating SWA](https://github.com/timgaripov/swa).
 
 To train SWAG use
 ```
