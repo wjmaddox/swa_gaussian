@@ -84,8 +84,9 @@ python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=C
       --model=VGG16 --lr_init=0.05 --wd=5e-4 --use_test --dir=<DIR>
 ```
 
-### Table of Results
+### Results
 
+Once the models are trained, you can evaluate them with `experiments/uncertainty/uncertainty.py` (see description [here](https://github.com/wjmaddox/private_swa_uncertainties/blob/master/experiments/uncertainty/README.md)).
 In the tables below we present the negative log likelihoods (NLL) for SWAG versions and baselines on CIFAR datasets.
 Please see the paper for more detailed results.
 
