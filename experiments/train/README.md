@@ -86,10 +86,22 @@ python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=C
 
 ### Table of Results
 
-#### CIFAR10 NLL
+In the tables below we present the negative log likelihoods (NLL) for SWAG versions and baselines on CIFAR datasets.
+Please see the paper for more detailed results.
+
+#### CIFAR100 
+
+| DNN                       |  SGD        | SWA         |SWAG       | SWAG-Diagonal | SWA-Dropout | SWA-Temp |
+| ------------------------- |:-----------:|:-----------:|:---------:|:-------------:|:-----------:|:--------:|
+| VGG16                     | 1.73 ± 0.01 | 1.28 ± 0.01 | 0.95 ± 0.0 | 1.02 ± 0.0 | 1.19 ± 0.05 | 1.04 ± 0.01 | 
+| PreResNet164              | 0.95 ± 0.02 | 0.74 ± 0.03 | 0.71 ± 0.02 | 0.68 ± 0.02 | -         | 0.68 ± 0.02 |
+| WideResNet28x10           | 0.80 ± 0.01  | 0.67 ± 0.0 | 0.60 ± 0.0 | 0.62 ± 0.0 | 0.06 ± 0.0 | 0.02 ± 0.00 |
+
+#### CIFAR10
 
 | DNN                       |  SGD        | SWA         |SWAG       | SWAG-Diagonal | SWA-Dropout | SWA-Temp |
 | ------------------------- |:-----------:|:-----------:|:---------:|:-------------:|:-----------:|:--------:|
 | VGG16                     | 0.33 ± 0.01 | 0.26 ± 0.01 | 0.20 ± 0.0 | 0.22 ± 0.01 | 0.23 ± 0.0 | 0.25 ± 0.02 | 
 | PreResNet164              | 0.18 ± 0.0  | 0.15 ± 0.00 | 0.12 ± 0.0 | 0.13 ± 0.0  | 0.13 ± 0.0 | 0.13 ± 0.0 |
 | WideResNet28x10           | 0.13 ± 0.0  | 0.11 ± 0.00 | 0.11 ± 0.0 | 0.11 ± 0.0  | 0.11 ± 0.0 | 0.11 ± 0.0 |
+
