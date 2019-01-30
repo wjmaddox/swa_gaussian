@@ -20,19 +20,26 @@ python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=C
 
 WideResNet28x10:
 ```bash
-# SWAG and SWAG-Dropout, CIFAR100
-python experiments/train/run_swag.py --dataset=[CIFAR10/CIFAR100] --data_path=[data_path] --use_test --model=WideResNet28x10 \
-      --epochs=300 --lr_init=0.1 --wd=5e-4 --swa --swa_start=161 --swa_lr=0.05 --cov_mat --dir=[dir]
+# SWAG
+python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=CIFAR100 --save_freq=300 \
+      --model=WideResNet28x10 --lr_init=0.1 --wd=5e-4 --swa --swa_start=161 --swa_lr=0.05 --cov_mat --use_test \
+      --dir=<DIR>
 
-# SGD, Laplace, and Dropout, CIFAR100
-python experiments/train/run_swag.py --data_path=[data_path] --dataset=[CIFAR100/CIFAR10] --use_test --model=WideResNet28x10 \
-      --epochs=300 --lr_init=0.1 --wd=5e-4 --dir=[dir]
+# SGD
+python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=CIFAR100 --save_freq=300 \
+      --model=WideResNet28x10 --lr_init=0.1 --wd=5e-4 --use_test --dir=<DIR>
 ```
 
 VGG16:
 ```bash
-#CIFAR10 SGD
-python run_swag.py --dataset=[CIFAR10/100] --data_path=[data_path] --model=VGG16 --epochs=300 --lr_init=0.05 --wd=3e-4 --dir=[dir] --use_test
+# SWAG
+python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=CIFAR100 --save_freq=300 \
+      --model=VGG16 --lr_init=0.05 --wd=5e-4 --swa --swa_start=161 --swa_lr=0.01 --cov_mat --use_test \
+      --dir=<DIR>
+
+# SGD
+python experiments/train/run_swag.py --data_path=<PATH> --epochs=300 --dataset=CIFAR100 --save_freq=300 \
+      --model=VGG16 --lr_init=0.05 --wd=5e-4 --use_test --dir=<DIR>
 ```
 ### Explanation of some other options
 
