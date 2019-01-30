@@ -1,6 +1,47 @@
 ## Image Classification README
 
-The scripts in `experiments/train/run_swag.py` allow to train SWA, SWAG and SGD models on CIFAR-10 and CIFAR-100. We list the scripts for reproducing the results from the paper below.
+The scripts in `experiments/train/run_swag.py` allow to train SWA, SWAG and SGD models on CIFAR-10 and CIFAR-100. 
+
+To train SWAG use
+```
+python experiments/train/run_swag.py
+      --dir=<DIR> \
+      --dataset=<DATASET> \
+      --data_path=<PATH> \
+      --model=<MODEL> \
+      --epochs=<EPOCHS> \
+      --lr_init=<LR_INIT> \
+      --wd=<WD> \
+      --swa \
+      --swa_start=<SWA_START> \
+      --swa_lr=<SWA_LR> \
+      [--cov_mat \]
+      [--use_test \]
+      [--split_classes=<SPLIT> \]
+```
+Parameters:
+
+* ```DIR``` &mdash; path to training directory where checkpoints will be stored
+* ```DATASET``` &mdash; dataset name [CIFAR10/CIFAR100] (default: CIFAR10)
+* ```PATH``` &mdash; path to the data directory
+* ```MODEL``` &mdash; DNN model name:
+    - VGG16/VGG16BN/VGG19/VGG19BN
+    - PreResNet110/PreResNet164
+    - WideResNet28x10
+* ```EPOCHS``` &mdash; number of training epochs (default: 200)
+* ```LR_INIT``` &mdash; initial learning rate (default: 0.1)
+* ```WD``` &mdash; weight decay (default: 1e-4)
+* ```SWA_START``` &mdash; the number of epoch after which SWA will start to average models (default: 161)
+* ```SWA_LR``` &mdash;  SWA learning rate (default: 0.05)
+* ```--cov_mat``` &mdash; store covariance matrices with SWAG; default is SWAG-Diagonal. 
+* ```--use_test``` &mdash; use test data to evaluate the method; by default validation data is used for evaluation. 
+* ```--split_classes``` &mdash; use this flag to train on only 5 of the 10 classes of CIFAR10 (set `SPLIT` to either 0 or 1);
+
+To train SGD models, you can use the same script  without specifying the `--swa`, `--swa_start`, `--swa_lr` and `--cov_mat` flags.
+
+### Reproducing results from the paper
+
+We list the scripts for reproducing the results from the paper below.
 
 PreResNet164:
 ```bash
