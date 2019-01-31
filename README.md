@@ -2,7 +2,7 @@
 
 This repository contains a PyTorch implementation of Stochastic Weight Averaging-Gaussian (SWAG) from the paper
 
-*A Simple Baseline for Bayesian Uncertainty in Deep Learning*
+*A Simple Baseline for Bayesian Deep Learning*
 
 by Wesley Maddox, Timur Garipov, Pavel Izmailov, Dmitry Vetrov, and Andrew Gordon Wilson
 
