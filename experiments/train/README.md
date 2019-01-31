@@ -26,9 +26,9 @@ Parameters:
 * ```DATASET``` &mdash; dataset name [CIFAR10/CIFAR100] (default: CIFAR10)
 * ```PATH``` &mdash; path to the data directory
 * ```MODEL``` &mdash; DNN model name:
-    - VGG16/VGG16BN/VGG19/VGG19BN
-    - PreResNet110/PreResNet164
-    - WideResNet28x10
+    - VGG16/VGG16Drop
+    - PreResNet164/PreResNet164Drop
+    - WideResNet28x10/WideResNet28x10Drop
 * ```EPOCHS``` &mdash; number of training epochs (default: 200)
 * ```LR_INIT``` &mdash; initial learning rate (default: 0.1)
 * ```WD``` &mdash; weight decay (default: 1e-4)
@@ -38,7 +38,7 @@ Parameters:
 * ```--use_test``` &mdash; use test data to evaluate the method; by default validation data is used for evaluation. 
 * ```--split_classes``` &mdash; use this flag to train on only 5 of the 10 classes of CIFAR10 (set `SPLIT` to either 0 or 1);
 
-To train SGD models, you can use the same script  without specifying the `--swa`, `--swa_start`, `--swa_lr` and `--cov_mat` flags.
+To train SGD models, you can use the same script  without specifying the `--swa`, `--swa_start`, `--swa_lr` and `--cov_mat` flags. Models `VGG16Drop`, `PreResNet164Drop` and `WideResNet28x10Drop` are the same as `VGG16`, `PreResNet164` and `WideResNet28x10` respectively, but with dropout added before each layer. 
 
 ### Reproducing results from the paper
 
