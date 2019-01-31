@@ -146,7 +146,8 @@ for i in range(args.N):
         targets[k:(k+target.size(0))] = target.numpy()
         k += input.size()[0]
 
-    print(np.mean(np.argmax(predictions, axis=1) == targets), nll(predictions / (i+1), targets))
+    print("Accuracy:", np.mean(np.argmax(predictions, axis=1) == targets))
+    print("NLL:", nll(predictions / (i+1), targets))
 predictions /= args.N
 
 entropies = -np.sum(np.log(predictions + eps) * predictions, axis=1)
