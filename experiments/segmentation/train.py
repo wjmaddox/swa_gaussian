@@ -134,7 +134,7 @@ else:
 
 if args.swa and args.swa_resume is not None:
     checkpoint = torch.load(args.swa_resume)
-    swag_model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20, loading=True, *model_cfg.args, 
+    swag_model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20, *model_cfg.args, 
                         num_classes=num_classes, use_aleatoric=args.loss=='aleatoric', **model_cfg.kwargs)
     swag_model.to(args.device)
     swag_model.load_state_dict(checkpoint['state_dict'])

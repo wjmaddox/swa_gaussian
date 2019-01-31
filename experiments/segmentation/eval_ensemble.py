@@ -59,7 +59,7 @@ model_cfg = getattr(models, 'FCDenseNet67')
 loaders, num_classes = data.loaders('CamVid', args.data_path, args.batch_size, args.num_workers, ft_batch_size=1, 
                     transform_train=model_cfg.transform_train, transform_test=model_cfg.transform_test, 
                     joint_transform=model_cfg.joint_transform, ft_joint_transform=model_cfg.ft_joint_transform,
-                    )
+                    target_transform=model_cfg.target_transform)
 
 if args.loss == 'cross_entropy':
     criterion = losses.seg_cross_entropy
@@ -68,7 +68,7 @@ else:
 
 print('Preparing model')
 if args.method in ['SWAG', 'HomoNoise', 'SWAGDrop']:
-    model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20, loading=True, 
+    model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20,  
                 num_classes=num_classes, use_aleatoric=args.loss=='aleatoric')
 
 elif args.method in ['SGD', 'Dropout']:
@@ -112,7 +112,7 @@ for i in range(args.N):
             model.sample(scale=args.scale, cov=sample_with_cov)
 
     if 'SWAG' in args.method:
-        bn_update(loaders['train'], model)
+        bn_update(loaders['fine_tune'], model)
         
     model.eval()
     if args.method in ['Dropout', 'SWAGDrop']:

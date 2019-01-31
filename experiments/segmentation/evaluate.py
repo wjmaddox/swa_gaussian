@@ -45,10 +45,10 @@ torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
 
 model_cfg = getattr(models, 'FCDenseNet67')
-loaders, num_classes = data.loaders('CamVid', args.data_path, args.batch_size, 1, ft_batch_size=1, 
+loaders, num_classes = data.loaders('CamVid', args.data_path, args.batch_size, 4, ft_batch_size=1, 
                     transform_train=model_cfg.transform_train, transform_test=model_cfg.transform_test, 
                     joint_transform=model_cfg.joint_transform, ft_joint_transform=model_cfg.ft_joint_transform,
-                    )
+                    target_transform=model_cfg.target_transform)
 
 #criterion = nn.NLLLoss(weight=camvid.class_weight[:-1].cuda(), reduction='none').cuda()
 if args.loss == 'cross_entropy':
@@ -59,13 +59,13 @@ else:
 # construct and load model
 if args.swa_resume is not None:
     checkpoint = torch.load(args.swa_resume)
-    model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20, loading=True, 
+    model = SWAG(model_cfg.base, no_cov_mat=False, max_num_models=20,  
                 num_classes=num_classes, use_aleatoric=args.loss=='aleatoric')
     model.cuda()
     model.load_state_dict(checkpoint['state_dict'])
 
     model.sample(0.0)
-    bn_update(loaders['test'], model)
+    bn_update(loaders['fine_tune'], model)
 else:
     model = model_cfg.base(num_classes=num_classes, use_aleatoric=args.loss=='aleatoric').cuda()
     checkpoint = torch.load(args.resume)
@@ -87,5 +87,6 @@ targets = np.concatenate(model_output_targets['targets'])
 
 if args.loss=='aleatoric':
     scales = np.concatenate(model_output_targets['scales'])
-
+else:
+    scales = None
 np.savez(args.output, preds=outputs, targets=targets, scales=scales)
