@@ -44,8 +44,8 @@ class SWAG(torch.nn.Module):
         self.base = base(*args, **kwargs)
         self.base.apply(lambda module: swag_parameters(module=module, params=self.params, no_cov_mat=self.no_cov_mat))
 
-    def forward(self, input):
-        return self.base(input)
+    def forward(self, *args, **kwargs):
+        return self.base( *args, **kwargs)
 
     def sample(self, scale=1.0, cov=False, seed=None, block = False, fullrank = True):
         if seed is not None:
