@@ -8,8 +8,8 @@ by Wesley Maddox, Timur Garipov, Pavel Izmailov, Dmitry Vetrov, and Andrew Gordo
 
 ## Introduction
 
-SWA-Gaussian (SWAG) is a simple method for Bayesian deep learning that can be used as a drop-in replacement for SWA and the standard SGD training procedure (as long as some sort of regularization is used).
-The key idea of SWAG is that the SGD iterates act like samples from a Gaussian distribution; SWAG fits this Gaussian distribution by capturing the SWA mean and a covariance matrix.
+SWA-Gaussian (SWAG) is a convenient method for uncertainty representation and calibration in Bayesian deep learning.
+The key idea of SWAG is that the SGD iterates act like samples from a Gaussian distribution; SWAG fits this Gaussian distribution by capturing the SWA mean and a covariance matrix, representing the first two moments of SGD iterates. We use this Gaussian distribution as a posterior over neural network weights, and then perform a Bayesian model average, for uncertainty representation and calibration.
 
 In this repo, we implement SWAG for image classification with several different architectures on both CIFAR datasets and ImageNet. We also implement SWAG for semantic segmentation on CamVid using our implementation of a FCDenseNet67.
 Additionally included are several other experiments on exploring the covariance of the gradients of the SGD iterates, the eigenvalues of the Hessian, and width/PCA decompositions of the SWAG approximate posterior.
@@ -21,10 +21,10 @@ CIFAR10 -> STL10             |  CIFAR100
 Please cite our work if you find it useful:
 ```
 @article{maddoxfast,
-  title={Fast Uncertainty Estimates and Bayesian Model Averaging of DNNs},
+  title={A Simple Baseline for Bayesian Uncertainty in Deep Learning},
   author={Maddox, Wesley and Garipov, Timur and Izmailov, Pavel and Vetrov, Dmitry and Wilson, Andrew Gordon},
-  journal={UAI Workshop on Uncertainty in Deep Learning},
-  year={2018}
+  journal={arXiv pre-print},
+  year={2019}
 }
 ```
 
