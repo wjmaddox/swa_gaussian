@@ -69,7 +69,7 @@ loaders, num_classes = data.loaders(
     
 print('Preparing model')
 if args.method in ['SWAG', 'HomoNoise', 'SWAGDrop']:
-    model = SWAG(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models = 20, loading = True, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
+    model = SWAG(model_cfg.base, no_cov_mat=not args.cov_mat, max_num_models=20, *model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 elif args.method in ['SGD', 'Dropout', 'KFACLaplace']:
     model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 else:
