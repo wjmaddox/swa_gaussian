@@ -1,5 +1,5 @@
 # One Hundred Layers Tiramisu
-PyTorch implementation of [The One Hundred Layers Tiramisu: Fully Convolutional DenseNets for Semantic Segmentation](https://arxiv.org/pdf/1611.09326).
+PyTorch implementation of [The One Hundred Layers Tiramisu: Fully Convolutional DenseNets for Semantic Segmentation](https://arxiv.org/pdf/1611.09326). Based off of the very nice https://github.com/bfortuner/pytorch_tiramisu .
 
 Tiramisu combines [DensetNet](https://arxiv.org/abs/1608.06993) and [U-Net](https://arxiv.org/abs/1505.04597) for high performance semantic segmentation. In this repository, we attempt to replicate the authors' results on the CamVid dataset.
 
@@ -40,27 +40,18 @@ Specs
 
 Tiramisu adopts the UNet design with downsampling, bottleneck, and upsampling paths and skip connections. It replaces convolution and max pooling layers with Dense blocks from the DenseNet architecture. Dense blocks contain residual connections like in ResNet except they concatenate, rather than sum, prior feature maps.
 
-![](docs/architecture_paper.png)
-
-
-**Layers**
-
-![](docs/denseblock.png)
-
-**FCDenseNet103**
-
-![](docs/fcdensenet103_arch.png)
-
-## Our Results
+## Our Best Results
 
 **FCDenseNet67**
 
-**FIX ME**
+Note that these results are not in the paper because we haven't quite been able to reproduce the RMSProp or SGD results reported in the Hundred Layer Tiramisu paper. We suspect this to be due to subtle architectural differences. As such, our results here are just a demonstration that SWAG can be applied to other problems.
 
-| Dataset     | Loss  | Accuracy |
-| ----------- |:-----:| --------:|
-| Validation  | .209  | 92.5     |
-| Testset     | .435  | 86.8     |
+| Dataset     | Accuracy  | mIOU     | ECE     |
+| ----------- |:---------:| --------:| -------:|
+| SGD         | 91.06     | 64.59    | 0.09144 |
+| SWA         | 90.88     | 63.26    | 0.09179 |
+| Dropout     | 90.08     | 62.32    | 0.08925 |
+| SWAG        | 91.01     | 63.32    | 0.09144 |      
 
 
 ## Training
@@ -68,10 +59,8 @@ Tiramisu adopts the UNet design with downsampling, bottleneck, and upsampling pa
 **Hyperparameters**
 
 * WeightInitialization = HeUniform
-* Optimizer = RMSProp
-* LR = .001 with exponential decay of 0.995 after each epoch
-* Data Augmentation = Random Crops, Vertical Flips
-* ValidationSet with early stopping based on IoU or MeanAccuracy with patience of 100 (50 during finetuning)
+* Optimizer = SGD
+* Data Augmentation = Random Crops, Horizontal Flips
 * WeightDecay = .0001
 * Finetune with full-size images, LR = .0001
 * Dropout = 0.2
