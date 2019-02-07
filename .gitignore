@@ -66,3 +66,16 @@ target/
 
 #Idea
 .idea*
+
+*.pt
+*.npz
+*.png
+._*
+*.out
+*.log
+*.eps
+*.sh
+*.pdf
+.DS_Store
+*.err
+*.sub
