@@ -2,14 +2,14 @@
 
 This repository contains a PyTorch implementation of Stochastic Weight Averaging-Gaussian (SWAG) from the paper
 
-*A Simple Baseline for Bayesian Uncertainty in Deep Learning*
+[A Simple Baseline for Bayesian Uncertainty in Deep Learning](https://arxiv.org/abs/1902.02476)
 
 by Wesley Maddox, Timur Garipov, Pavel Izmailov, Dmitry Vetrov, and Andrew Gordon Wilson
 
 ## Introduction
 
 SWA-Gaussian (SWAG) is a convenient method for uncertainty representation and calibration in Bayesian deep learning.
-The key idea of SWAG is that the SGD iterates act like samples from a Gaussian distribution; SWAG fits this Gaussian distribution by capturing the [SWA](https://arxiv.org/abs/1803.05407) mean and a covariance matrix, representing the first two moments of SGD iterates. We use this Gaussian distribution as a posterior over neural network weights, and then perform a Bayesian model average, for uncertainty representation and calibration.
+The key idea of SWAG is that the SGD iterates, with a modified learning rate schedule, act like samples from a Gaussian distribution; SWAG fits this Gaussian distribution by capturing the [SWA](https://arxiv.org/abs/1803.05407) mean and a covariance matrix, representing the first two moments of SGD iterates. We use this Gaussian distribution as a posterior over neural network weights, and then perform a Bayesian model average, for uncertainty representation and calibration.
 
 <p align="center">
   <img src="https://user-images.githubusercontent.com/14368801/52224039-09ab0b80-2875-11e9-9c12-c72b88abf4a9.png" width=350>
@@ -29,7 +29,7 @@ Please cite our work if you find it useful:
 @article{maddoxfast,
   title={A Simple Baseline for Bayesian Uncertainty in Deep Learning},
   author={Maddox, Wesley and Garipov, Timur and Izmailov, Pavel and Vetrov, Dmitry and Wilson, Andrew Gordon},
-  journal={arXiv pre-print},
+  journal={arXiv preprint arXiv:1902.02476},
   year={2019}
 }
 ```
