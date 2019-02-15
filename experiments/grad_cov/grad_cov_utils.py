@@ -22,7 +22,7 @@ def collect_grads(model, model_grads_list):
         grad_dict['sq_sum'] += param.grad.data ** 2.
         grad_dict['num_models'] += 1
 
-def compute_opt_lr(grad_list, batch_size, dataset_size):
+def compute_opt_lr(grad_list, momentum, dataset_size):
 
     var_diag_sum = 0
     num_params = 0
@@ -45,11 +45,11 @@ def compute_opt_lr(grad_list, batch_size, dataset_size):
 
         num_params += var.numel()
     
-    # this is the noise up-scaled by a factor of S
+    # this is the noise up-scaled by a factor of S, so this cancels with the upper batch size
     grad_noise = var_diag_sum.item()
-    # optimal lr is 2 * S /N * D/tr(C)
+    # optimal lr is 2 * \mu * S /N * D/tr(C)
 
-    return 2 * (batch_size ** 2) * num_params / (dataset_size * grad_noise), grad_noise
+    return 2 * num_params / (dataset_size * grad_noise), grad_noise
         
 
 def train_epoch(loader, model, criterion, optimizer, model_grads_list=None, cuda=True, regression=False, verbose=False, subset=None):
@@ -85,8 +85,9 @@ def train_epoch(loader, model, criterion, optimizer, model_grads_list=None, cuda
             # store gradients
             collect_grads(model, model_grads_list)
 
-            #compute optimal learning rates
-            lr, grad_noise = compute_opt_lr(model_grads_list, input.size(0), dataset_size)
+            # compute optimal learning rates
+            # note that \mu = 1 - sgd['momentum'] bc of differences in pytorch's implementation
+            lr, grad_noise = compute_opt_lr(model_grads_list, 1 - optimizer.param_groups[0]['momentum'], dataset_size)
 
         optimizer.step()
             
@@ -104,7 +105,7 @@ def train_epoch(loader, model, criterion, optimizer, model_grads_list=None, cuda
                 correct / num_objects_current * 100.0
             ))
             if model_grads_list is not None:
-                print('Learing Rate: %.3f. Sum of Var of Grad Noise: %.3f' % (lr, grad_noise))
+                print('Learning Rate: %.3f. tr(V(\hat(g))): %.3f' % (lr, grad_noise))
             verb_stage += 1
     
     return {
