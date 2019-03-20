@@ -42,7 +42,7 @@ python setup.py develop
 
 See requirements.txt file for requirements that came from our setup. We use Pytorch 1.0.0 in our experiments.
 
-Unless otherwise described, all experiments were run on a single GPU.
+Unless otherwise described, all experiments were run on a single GPU. Note that if you are using CUDA 10 you may need to manually install Pytorch with the correct CUDA toolkit.
 
 ## File Structure
 
