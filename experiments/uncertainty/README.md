@@ -28,7 +28,7 @@ Parameters:
 * ```<SCALE>``` &mdash; scale parameter for re-scaling the posterior approximation; in the experiments we set it equal to `0.5` for `SWAG` and to `1.` for `SWAG-diagonal` and `KFAC-Laplace` (default: `1`)
 * ```<SAMPLES>``` &mdash; number of samples from the approximate posterior to use in Bayesian model averaging (default: `30`)
 
-See the README of `experiments/train/run_swag.py` [here](https://github.com/wjmaddox/private_swa_uncertainties/blob/master/experiments/train/README.md#image-classification-readme) for the description of other parameters.
+See the README of `experiments/train/run_swag.py` [here](https://github.com/wjmaddox/swa_gaussian/blob/master/experiments/train/README.md) for the description of other parameters.
 
 Below we provide example commands for different methods using WideResNet28x10 on CIFAR100.
 
