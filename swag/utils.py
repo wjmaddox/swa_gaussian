@@ -9,42 +9,53 @@ import tqdm
 
 import torch.nn.functional as F
 
+
 def flatten(lst):
-    tmp = [i.contiguous().view(-1,1) for i in lst]
+    tmp = [i.contiguous().view(-1, 1) for i in lst]
     return torch.cat(tmp).view(-1)
+
 
 def unflatten_like(vector, likeTensorList):
     # Takes a flat torch.tensor and unflattens it to a list of torch.tensors
     #    shaped like likeTensorList
     outList = []
-    i=0
+    i = 0
     for tensor in likeTensorList:
-        #n = module._parameters[name].numel()
+        # n = module._parameters[name].numel()
         n = tensor.numel()
-        outList.append(vector[:,i:i+n].view(tensor.shape))
-        i+=n
+        outList.append(vector[:, i : i + n].view(tensor.shape))
+        i += n
     return outList
-    
-def LogSumExp(x,dim=0):
-    m,_ = torch.max(x,dim=dim,keepdim=True)
-    return m + torch.log((x - m).exp().sum(dim=dim,keepdim=True))
+
+
+def LogSumExp(x, dim=0):
+    m, _ = torch.max(x, dim=dim, keepdim=True)
+    return m + torch.log((x - m).exp().sum(dim=dim, keepdim=True))
+
 
 def adjust_learning_rate(optimizer, lr):
     for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+        param_group["lr"] = lr
     return lr
 
 
-def save_checkpoint(dir, epoch, name='checkpoint', **kwargs):
-    state = {
-        'epoch': epoch,
-    }
+def save_checkpoint(dir, epoch, name="checkpoint", **kwargs):
+    state = {"epoch": epoch}
     state.update(kwargs)
-    filepath = os.path.join(dir, '%s-%d.pt' % (name, epoch))
+    filepath = os.path.join(dir, "%s-%d.pt" % (name, epoch))
     torch.save(state, filepath)
 
 
-def train_epoch(loader, model, criterion, optimizer, cuda=True, regression=False, verbose=False, subset=None):
+def train_epoch(
+    loader,
+    model,
+    criterion,
+    optimizer,
+    cuda=True,
+    regression=False,
+    verbose=False,
+    subset=None,
+):
     loss_sum = 0.0
     correct = 0.0
     verb_stage = 0
@@ -67,11 +78,11 @@ def train_epoch(loader, model, criterion, optimizer, cuda=True, regression=False
             target = target.cuda(non_blocking=True)
 
         loss, output = criterion(model, input, target)
-        
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-            
+
         loss_sum += loss.data.item() * input.size(0)
 
         if not regression:
@@ -81,15 +92,19 @@ def train_epoch(loader, model, criterion, optimizer, cuda=True, regression=False
         num_objects_current += input.size(0)
 
         if verbose and 10 * (i + 1) / num_batches >= verb_stage + 1:
-            print('Stage %d/10. Loss: %12.4f. Acc: %6.2f' % (
-                verb_stage + 1, loss_sum / num_objects_current,
-                correct / num_objects_current * 100.0
-            ))
+            print(
+                "Stage %d/10. Loss: %12.4f. Acc: %6.2f"
+                % (
+                    verb_stage + 1,
+                    loss_sum / num_objects_current,
+                    correct / num_objects_current * 100.0,
+                )
+            )
             verb_stage += 1
-    
+
     return {
-        'loss': loss_sum / num_objects_current,
-        'accuracy': None if regression else correct / num_objects_current * 100.0
+        "loss": loss_sum / num_objects_current,
+        "accuracy": None if regression else correct / num_objects_current * 100.0,
     }
 
 
@@ -117,8 +132,8 @@ def eval(loader, model, criterion, cuda=True, regression=False, verbose=False):
                 correct += pred.eq(target.data.view_as(pred)).sum().item()
 
     return {
-        'loss': loss_sum / num_objects_total,
-        'accuracy': None if regression else correct / num_objects_total * 100.0,
+        "loss": loss_sum / num_objects_total,
+        "accuracy": None if regression else correct / num_objects_total * 100.0,
     }
 
 
@@ -142,15 +157,12 @@ def predict(loader, model, verbose=False):
             targets.append(target.numpy())
             offset += batch_size
 
-    return {
-        'predictions': np.vstack(predictions),
-        'targets': np.concatenate(targets)
-    }
+    return {"predictions": np.vstack(predictions), "targets": np.concatenate(targets)}
 
 
 def moving_average(net1, net2, alpha=1):
     for param1, param2 in zip(net1.parameters(), net2.parameters()):
-        param1.data *= (1.0 - alpha)
+        param1.data *= 1.0 - alpha
         param1.data += param2.data * alpha
 
 
@@ -220,12 +232,14 @@ def bn_update(loader, model, verbose=False, subset=None, **kwargs):
 
     model.apply(lambda module: _set_momenta(module, momenta))
 
-def inv_softmax(x, eps = 1e-10):
-    return torch.log(x/(1.0 - x + eps))
+
+def inv_softmax(x, eps=1e-10):
+    return torch.log(x / (1.0 - x + eps))
+
 
 def predictions(test_loader, model, seed=None, cuda=True, regression=False, **kwargs):
-    #will assume that model is already in eval mode
-    #model.eval()
+    # will assume that model is already in eval mode
+    # model.eval()
     preds = []
     targets = []
     for input, target in test_loader:
@@ -241,6 +255,7 @@ def predictions(test_loader, model, seed=None, cuda=True, regression=False, **kw
             preds.append(probs.cpu().data.numpy())
         targets.append(target.numpy())
     return np.vstack(preds), np.concatenate(targets)
+
 
 def schedule(epoch, lr_init, epochs, swa, swa_start=None, swa_lr=None):
     t = (epoch) / (swa_start if swa else epochs)

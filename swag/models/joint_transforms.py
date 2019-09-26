@@ -14,11 +14,12 @@ import types
 import torchvision.transforms.functional as TF
 
 _pil_interpolation_to_str = {
-    Image.NEAREST: 'PIL.Image.NEAREST',
-    Image.BILINEAR: 'PIL.Image.BILINEAR',
-    Image.BICUBIC: 'PIL.Image.BICUBIC',
-    Image.LANCZOS: 'PIL.Image.LANCZOS',
+    Image.NEAREST: "PIL.Image.NEAREST",
+    Image.BILINEAR: "PIL.Image.BILINEAR",
+    Image.BICUBIC: "PIL.Image.BICUBIC",
+    Image.LANCZOS: "PIL.Image.LANCZOS",
 }
+
 
 class JointCompose(object):
     """Composes several transforms together.
@@ -42,12 +43,13 @@ class JointCompose(object):
         return img, segmentation
 
     def __repr__(self):
-        format_string = self.__class__.__name__ + '('
+        format_string = self.__class__.__name__ + "("
         for t in self.transforms:
-            format_string += '\n'
-            format_string += '    {0}'.format(t)
-        format_string += '\n)'
+            format_string += "\n"
+            format_string += "    {0}".format(t)
+        format_string += "\n)"
         return format_string
+
 
 class JointRandomResizedCrop(object):
     """Crop the given PIL Image to random size and aspect ratio.
@@ -66,7 +68,13 @@ class JointRandomResizedCrop(object):
         interpolation: Default: PIL.Image.BILINEAR
     """
 
-    def __init__(self, size, scale=(0.08, 1.0), ratio=(3. / 4., 4. / 3.), interpolation=Image.BILINEAR):
+    def __init__(
+        self,
+        size,
+        scale=(0.08, 1.0),
+        ratio=(3.0 / 4.0, 4.0 / 3.0),
+        interpolation=Image.BILINEAR,
+    ):
         self.size = (size, size)
         self.interpolation = interpolation
         self.scale = scale
@@ -119,16 +127,19 @@ class JointRandomResizedCrop(object):
         """
         i, j, h, w = self.get_params(img, self.scale, self.ratio)
         img = TF.resized_crop(img, i, j, h, w, self.size, self.interpolation)
-        segmentation = TF.resized_crop(segmentation, i, j, h, w, self.size, self.interpolation)
+        segmentation = TF.resized_crop(
+            segmentation, i, j, h, w, self.size, self.interpolation
+        )
         return img, segmentation
 
     def __repr__(self):
         interpolate_str = _pil_interpolation_to_str[self.interpolation]
-        format_string = self.__class__.__name__ + '(size={0}'.format(self.size)
-        format_string += ', scale={0}'.format(tuple(round(s, 4) for s in self.scale))
-        format_string += ', ratio={0}'.format(tuple(round(r, 4) for r in self.ratio))
-        format_string += ', interpolation={0})'.format(interpolate_str)
+        format_string = self.__class__.__name__ + "(size={0}".format(self.size)
+        format_string += ", scale={0}".format(tuple(round(s, 4) for s in self.scale))
+        format_string += ", ratio={0}".format(tuple(round(r, 4) for r in self.ratio))
+        format_string += ", interpolation={0})".format(interpolate_str)
         return format_string
+
 
 class JointRandomHorizontalFlip(object):
     """Randomly horizontally flips the given list of PIL.Image with a probability of 0.5
@@ -139,6 +150,7 @@ class JointRandomHorizontalFlip(object):
             image = TF.hflip(image)
             segmentation = TF.hflip(segmentation)
         return image, segmentation
+
 
 class LabelToLongTensor(object):
     def __call__(self, pic):

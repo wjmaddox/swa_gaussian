@@ -24,6 +24,7 @@ def gradtensor_to_tensor(net, include_bn=False):
     filter = lambda p: include_bn or len(p.data.size()) > 1
     return flatten([p.grad.data for p in net.parameters() if filter(p)])
 
+
 ################################################################################
 #                  For computing Hessian-vector products
 ################################################################################
@@ -45,7 +46,7 @@ def eval_hess_vec_prod(vec, params, net, criterion, dataloader, use_cuda=False):
         vec = [v.cuda() for v in vec]
 
     net.eval()
-    net.zero_grad() # clears grad for every parameter in the net
+    net.zero_grad()  # clears grad for every parameter in the net
 
     for batch_idx, (inputs, targets) in enumerate(dataloader):
         inputs, targets = Variable(inputs), Variable(targets)
@@ -57,8 +58,8 @@ def eval_hess_vec_prod(vec, params, net, criterion, dataloader, use_cuda=False):
         grad_f = torch.autograd.grad(loss, inputs=params, create_graph=True)
 
         # Compute inner product of gradient with the direction vector
-        #prod = Variable(torch.zeros(1)).type(type(grad_f[0].data))
-        prod = torch.zeros(1, dtype=grad_f[0].dtype, device = grad_f[0].device)
+        # prod = Variable(torch.zeros(1)).type(type(grad_f[0].data))
+        prod = torch.zeros(1, dtype=grad_f[0].dtype, device=grad_f[0].device)
         for (g, v) in zip(grad_f, vec):
             prod = prod + (g * v).sum()
 
@@ -67,10 +68,13 @@ def eval_hess_vec_prod(vec, params, net, criterion, dataloader, use_cuda=False):
         # accumulate the gradients into the params.grad attributes
         prod.backward()
 
+
 ################################################################################
 #                  For computing Eigenvalues of Hessian
 ################################################################################
-def min_max_hessian_eigs(net, dataloader, criterion, rank=0, use_cuda=False, verbose=False):
+def min_max_hessian_eigs(
+    net, dataloader, criterion, rank=0, use_cuda=False, verbose=False
+):
     """
         Compute the largest and the smallest eigenvalues of the Hessian marix.
         Args:
@@ -96,45 +100,62 @@ def min_max_hessian_eigs(net, dataloader, criterion, rank=0, use_cuda=False, ver
         start_time = time.time()
         eval_hess_vec_prod(vec, params, net, criterion, dataloader, use_cuda)
         prod_time = time.time() - start_time
-        if verbose and rank == 0: print("   Iter: %d  time: %f" % (hess_vec_prod.count, prod_time))
+        if verbose and rank == 0:
+            print("   Iter: %d  time: %f" % (hess_vec_prod.count, prod_time))
         out = gradtensor_to_tensor(net)
         return out.unsqueeze(1)
 
     hess_vec_prod.count = 0
-    if verbose and rank == 0: print("Rank %d: computing max eigenvalue" % rank)
+    if verbose and rank == 0:
+        print("Rank %d: computing max eigenvalue" % rank)
 
     # use lanczos to get the t and q matrices out
-    _, pos_t_mat = lanczos_tridiag(hess_vec_prod, 100, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
+    _, pos_t_mat = lanczos_tridiag(
+        hess_vec_prod,
+        100,
+        device=params[0].device,
+        dtype=params[0].dtype,
+        matrix_shape=(N, N),
+    )
     # convert the tridiagonal t matrix to the eigenvalues
     pos_eigvals, _ = lanczos_tridiag_to_diag(pos_t_mat)
     print(pos_eigvals)
     # eigenvalues may not be sorted
     maxeig = torch.max(pos_eigvals)
 
-
-    #maxeig = pos_eigvals[0]
-    if verbose and rank == 0: print('max eigenvalue = %f' % maxeig)
+    # maxeig = pos_eigvals[0]
+    if verbose and rank == 0:
+        print("max eigenvalue = %f" % maxeig)
 
     # If the largest eigenvalue is positive, shift matrix so that any negative eigenvalue is now the largest
     # We assume the smallest eigenvalue is zero or less, and so this shift is more than what we need
-    #shift = maxeig*.51
+    # shift = maxeig*.51
     shift = 0.51 * maxeig.item()
     print(shift)
+
     def shifted_hess_vec_prod(vec):
         hvp = hess_vec_prod(vec)
-        return -hvp + shift*vec
-    
-    if verbose and rank == 0: print("Rank %d: Computing shifted eigenvalue" % rank)
+        return -hvp + shift * vec
+
+    if verbose and rank == 0:
+        print("Rank %d: Computing shifted eigenvalue" % rank)
 
     # now run lanczos on the shifted eigenvalues
-    _, neg_t_mat = lanczos_tridiag(shifted_hess_vec_prod, 200, device = params[0].device, dtype = params[0].dtype, matrix_shape=(N,N))
+    _, neg_t_mat = lanczos_tridiag(
+        shifted_hess_vec_prod,
+        200,
+        device=params[0].device,
+        dtype=params[0].dtype,
+        matrix_shape=(N, N),
+    )
     neg_eigvals, _ = lanczos_tridiag_to_diag(neg_t_mat)
     mineig = torch.max(neg_eigvals)
     print(neg_eigvals)
 
     mineig = -mineig + shift
     print(mineig)
-    if verbose and rank == 0: print('min eigenvalue = ' + str(mineig))
+    if verbose and rank == 0:
+        print("min eigenvalue = " + str(mineig))
 
     if maxeig <= 0 and mineig > 0:
         maxeig, mineig = mineig, maxeig
