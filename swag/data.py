@@ -230,21 +230,22 @@ def loaders(
 
         print("Using classes:", end="")
         print(c10_classes[split_classes])
-        train_mask = np.isin(train_set.train_labels, c10_classes[split_classes])
-        train_set.train_data = train_set.train_data[train_mask, :]
-        train_set.train_labels = np.array(train_set.train_labels)[train_mask]
-        train_set.train_labels = np.where(
-            train_set.train_labels[:, None] == c10_classes[split_classes][None, :]
+        train_mask = np.isin(train_set.targets, c10_classes[split_classes])
+        train_set.data = train_set.data[train_mask, :]
+        train_set.targets = np.array(train_set.targets)[train_mask]
+        train_set.targets = np.where(
+            train_set.targets[:, None] == c10_classes[split_classes][None, :]
         )[1].tolist()
-        print("Train: %d/%d" % (train_set.train_data.shape[0], train_mask.size))
+        print("Train: %d/%d" % (train_set.data.shape[0], train_mask.size))
 
-        test_mask = np.isin(test_set.test_labels, c10_classes[split_classes])
-        test_set.test_data = test_set.test_data[test_mask, :]
-        test_set.test_labels = np.array(test_set.test_labels)[test_mask]
-        test_set.test_labels = np.where(
-            test_set.test_labels[:, None] == c10_classes[split_classes][None, :]
+        test_mask = np.isin(test_set.targets, c10_classes[split_classes])
+        print(test_set.data.shape, test_mask.shape)
+        test_set.data = test_set.data[test_mask, :]
+        test_set.targets = np.array(test_set.targets)[test_mask]
+        test_set.targets = np.where(
+            test_set.targets[:, None] == c10_classes[split_classes][None, :]
         )[1].tolist()
-        print("Test: %d/%d" % (test_set.test_data.shape[0], test_mask.size))
+        print("Test: %d/%d" % (test_set.data.shape[0], test_mask.size))
 
     return (
         {
