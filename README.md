@@ -25,7 +25,7 @@ CIFAR10 -> STL10             |  CIFAR100
 ![](plots/stl_wrn.jpg)  |  ![](plots/c100_resnet110.jpg)
 
 Please cite our work if you find it useful:
-```
+```bibtex
 @article{maddoxfast,
   title={A Simple Baseline for Bayesian Uncertainty in Deep Learning},
   author={Maddox, Wesley and Garipov, Timur and Izmailov, Pavel and Vetrov, Dmitry and Wilson, Andrew Gordon},
