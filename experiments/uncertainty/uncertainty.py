@@ -210,6 +210,7 @@ for i in range(args.N):
         k += input.size()[0]
 
     print("Accuracy:", np.mean(np.argmax(predictions, axis=1) == targets))
+    #nll is sum over entire dataset
     print("NLL:", nll(predictions / (i + 1), targets))
 predictions /= args.N
 
