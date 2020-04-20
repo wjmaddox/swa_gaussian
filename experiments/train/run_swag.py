@@ -156,7 +156,10 @@ parser.add_argument("--no_schedule", action="store_true", help="store schedule")
 args = parser.parse_args()
 
 args.device = None
-if torch.cuda.is_available():
+
+use_cuda = torch.cuda.is_available()
+
+if use_cuda:
     args.device = torch.device("cuda")
 else:
     args.device = torch.device("cpu")
@@ -282,9 +285,9 @@ for epoch in range(start_epoch, args.epochs):
         lr = args.lr_init
 
     if (args.swa and (epoch + 1) > args.swa_start) and args.cov_mat:
-        train_res = utils.train_epoch(loaders["train"], model, criterion, optimizer)
+        train_res = utils.train_epoch(loaders["train"], model, criterion, optimizer, cuda=use_cuda)
     else:
-        train_res = utils.train_epoch(loaders["train"], model, criterion, optimizer)
+        train_res = utils.train_epoch(loaders["train"], model, criterion, optimizer, cuda=use_cuda)
 
     if (
         epoch == 0
