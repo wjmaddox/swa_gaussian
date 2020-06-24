@@ -156,7 +156,10 @@ parser.add_argument("--no_schedule", action="store_true", help="store schedule")
 args = parser.parse_args()
 
 args.device = None
-if torch.cuda.is_available():
+
+use_cuda = torch.cuda.is_available()
+
+if use_cuda:
     args.device = torch.device("cuda")
 else:
     args.device = torch.device("cpu")
@@ -169,7 +172,9 @@ with open(os.path.join(args.dir, "command.sh"), "w") as f:
 
 torch.backends.cudnn.benchmark = True
 torch.manual_seed(args.seed)
-torch.cuda.manual_seed(args.seed)
+
+if use_cuda:
+    torch.cuda.manual_seed(args.seed)
 
 print("Using model %s" % args.model)
 model_cfg = getattr(models, args.model)
@@ -282,16 +287,16 @@ for epoch in range(start_epoch, args.epochs):
         lr = args.lr_init
 
     if (args.swa and (epoch + 1) > args.swa_start) and args.cov_mat:
-        train_res = utils.train_epoch(loaders["train"], model, criterion, optimizer)
+        train_res = utils.train_epoch(loaders["train"], model, criterion, optimizer, cuda=use_cuda)
     else:
-        train_res = utils.train_epoch(loaders["train"], model, criterion, optimizer)
+        train_res = utils.train_epoch(loaders["train"], model, criterion, optimizer, cuda=use_cuda)
 
     if (
         epoch == 0
         or epoch % args.eval_freq == args.eval_freq - 1
         or epoch == args.epochs - 1
     ):
-        test_res = utils.eval(loaders["test"], model, criterion)
+        test_res = utils.eval(loaders["test"], model, criterion, cuda=use_cuda))
     else:
         test_res = {"loss": None, "accuracy": None}
 
@@ -338,7 +343,10 @@ for epoch in range(start_epoch, args.epochs):
             )
 
     time_ep = time.time() - time_ep
-    memory_usage = torch.cuda.memory_allocated() / (1024.0 ** 3)
+    
+    if use_cuda:
+        memory_usage = torch.cuda.memory_allocated() / (1024.0 ** 3)
+        
     values = [
         epoch + 1,
         lr,
