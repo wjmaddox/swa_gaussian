@@ -296,7 +296,7 @@ for epoch in range(start_epoch, args.epochs):
         or epoch % args.eval_freq == args.eval_freq - 1
         or epoch == args.epochs - 1
     ):
-        test_res = utils.eval(loaders["test"], model, criterion, cuda=use_cuda))
+        test_res = utils.eval(loaders["test"], model, criterion, cuda=use_cuda)
     else:
         test_res = {"loss": None, "accuracy": None}
 
