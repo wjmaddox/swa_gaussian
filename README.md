@@ -26,10 +26,11 @@ CIFAR10 -> STL10             |  CIFAR100
 
 Please cite our work if you find it useful:
 ```bibtex
-@article{maddoxfast,
-  title={A Simple Baseline for Bayesian Uncertainty in Deep Learning},
-  author={Maddox, Wesley and Garipov, Timur and Izmailov, Pavel and Vetrov, Dmitry and Wilson, Andrew Gordon},
-  journal={arXiv preprint arXiv:1902.02476},
+@inproceedings{maddox_2019_simple,
+  title={A simple baseline for bayesian uncertainty in deep learning},
+  author={Maddox, Wesley J and Izmailov, Pavel and Garipov, Timur and Vetrov, Dmitry P and Wilson, Andrew Gordon},
+  booktitle={Advances in Neural Information Processing Systems},
+  pages={13153--13164},
   year={2019}
 }
 ```
