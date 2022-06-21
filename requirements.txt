@@ -1,5 +1,5 @@
 tqdm==4.26.0
-numpy==1.14.3
+numpy==1.22.0
 torch>=1.5
 torchvision>=0.4
 gpytorch==0.1.0rc4
