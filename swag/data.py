@@ -193,7 +193,7 @@ def loaders(
         train_set.labels = cls_mapping[train_set.labels]
     else:
         train_set = ds(root=path, train=True, download=True, transform=transform_train)
-        num_classes = max(train_set.targets) + 1
+        num_classes = max(train_set.train_labels) + 1
 
     if use_validation:
         print(
